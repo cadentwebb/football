@@ -1,0 +1,32 @@
+---
+title: "Get ESPN QBR"
+output: html_notebook
+---
+
+```{r}
+#get weekly qbr for 2017 and 2018 seasons
+
+#initialize dataframe
+weekly_qbr <- data.frame()
+
+#loop throug seasons and weeks
+for (i in 2017:2018)
+{
+  for (j in 1:17)
+  {
+    week <- espnscrapeR::get_nfl_qbr(season = i, week = j, season_type = "Regular")
+    weekly_qbr <- weekly_qbr %>% rbind(week)
+  }
+}
+
+#get season total qbr for 2017 and 2018 seasons
+year_qbr <- espnscrapeR::get_nfl_qbr(season = 2017) %>% rbind(espnscrapeR::get_nfl_qbr(season = 2018))
+
+#export weekly qbr to csv
+weekly_qbr %>% write.csv("2017-2018 Weekly ESPN QBR.csv")
+
+#export year qbr to csv
+year_qbr %>% write.csv("2017-2018 Year ESPN QBR.csv")
+```
+
+
