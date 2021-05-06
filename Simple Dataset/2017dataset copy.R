@@ -35,16 +35,23 @@ plays2017 <- inner_join(databowlPlays2017, pbpPlays2017,
 plays2017 <- plays2017 %>% 
   select(gameId, playId, playDescription, 
          defendersInTheBox, numberOfPassRushers, 
-         personnel.defense, play_type) %>% 
+         personnel.defense, play_type,
+         passer_player_name) %>% 
   # Eliminate special teams plaeys - keep only runs and passes
   filter(play_type %in% c("run", "pass"))
+
+# Show how many plays each QB is the thrower in
+plays2017 %>% 
+  group_by(passer_player_name) %>% 
+  filter(!is.na(passer_player_name)) %>% 
+  summarize(n())
 
 
 
 
 # Example of adding the QBR for Carson Palmer to plays2017
 # First, get the data from Nate's file
-qbr2017 <- read_csv("2017-2018 Weekly Espn QBR.csv")
+qbr2017 <- read_csv("2017-2018 Weekly Espn QBR copy.csv")
 
 # Create a qbr column initiated with all zeros
 plays2017$qbr <- rep(0, dim(plays2017)[1])
@@ -52,13 +59,13 @@ plays2017$qbr <- rep(0, dim(plays2017)[1])
 # Search each play description for the string "C.Palmer" and return TRUE if
 # it's found
 # Then, add in Carson Palmer's week 1 rating of 35.6 to each of those columns
-qb <- "C.Palmer"
-for (i in 1:dim(plays2017)[1]) {
-  if (grepl(qb, plays2017[[3]][i])) {
-    plays2017$qbr[i] <- qbr2017[qbr2017$short_name == "C. Palmer" & qbr2017$week_text == "Week 1", 
-        11][[1]][1]
-  }
-}
+#qb <- "C.Palmer"
+#for (i in 1:dim(plays2017)[1]) {
+#  if (grepl(qb, plays2017[[3]][i])) {
+#    plays2017$qbr[i] <- qbr2017[qbr2017$short_name == "C. Palmer" & qbr2017$week_text == "Week 1", 
+#        11][[1]][1]
+#  }
+#}
 
 
 
