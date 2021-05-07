@@ -9,6 +9,7 @@ databowlPlays2017 <- vroom("https://raw.githubusercontent.com/nfl-football-ops/B
 # Get all play by play data from 2017 season
 pbpPlays2017 <- load_pbp(2017)
 
+
 # Change column names in pbp to make it easily joinable to allPlays2017
 colnames(pbpPlays2017)[3] <- "gameId"
 colnames(pbpPlays2017)[1] <- "playId"
@@ -51,7 +52,7 @@ plays2017 %>%
 
 # Example of adding the QBR for Carson Palmer to plays2017
 # First, get the data from Nate's file
-qbr2017 <- read_csv("2017-2018 Weekly Espn QBR copy.csv")
+qbr2017 <- vroom("https://raw.githubusercontent.com/cadentwebb/football/main/ESPN%20QBR%20(2017-2018)/2017-2018%20Weekly%20ESPN%20QBR.csv?token=ATH3CLAVYCCXCO6FKQMQD2LASVQJ6")
 
 # Create a qbr column initiated with all zeros
 plays2017$qbr <- rep(0, dim(plays2017)[1])
