@@ -1,4 +1,7 @@
 
+
+# Adding QBR to the dataset
+
 library(nflfastR)
 library(tidyverse)
 library(vroom)
@@ -86,29 +89,3 @@ for (i in qbs[[1]]) {
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-# Search each play description for the string "C.Palmer" and return TRUE if
-# it's found
-# Then, add in Carson Palmer's week 1 rating of 35.6 to each of those columns
-#qb <- "C.Palmer"
-#for (i in 1:dim(plays2017)[1]) {
-#  if (grepl(qb, plays2017[[3]][i])) {
-#    plays2017$qbr[i] <- qbr2017[qbr2017$short_name == "C. Palmer" & qbr2017$week_text == "Week 1", 
-#        11][[1]][1]
-#  }
-#}
-
-
-
-
