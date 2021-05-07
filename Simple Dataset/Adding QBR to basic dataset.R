@@ -39,9 +39,11 @@ plays2017 <- inner_join(databowlPlays2017, pbpPlays2017,
 # game ID
 # play ID
 # week
+# posteam
+# defteam
 
 plays2017 <- plays2017 %>% 
-  select(gameId, playId, week, playDescription, 
+  select(gameId, playId, posteam, defteam, week, playDescription, 
          defendersInTheBox, numberOfPassRushers, 
          personnel.defense, play_type,
          passer_player_name) %>% 
