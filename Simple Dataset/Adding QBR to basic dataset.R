@@ -6,6 +6,7 @@ library(nflfastR)
 library(tidyverse)
 library(vroom)
 
+
 # Get all pass and rush plays from first 6 weeks of 2017 season
 databowlPlays2017 <- vroom("https://raw.githubusercontent.com/nfl-football-ops/Big-Data-Bowl/master/Data/plays.csv")
 
@@ -56,8 +57,8 @@ plays2017 <- plays2017 %>%
 
 # Adding Weeks 1-6 QBR to dataset
 # First, get the data from Nate's file
-qbr2017 <- vroom("https://raw.githubusercontent.com/cadentwebb/football/main/ESPN%20QBR%20(2017-2018)/2017-2018%20Weekly%20ESPN%20QBR.csv?token=ATH3CLAVYCCXCO6FKQMQD2LASVQJ6")
 
+qbr2017 <- vroom("https://raw.githubusercontent.com/cadentwebb/football/main/ESPN%20QBR%20(2017-2018)/2017-2018%20Weekly%20ESPN%20QBR.csv?token=ATH3CLE44LHB7SRKOON2TN3ASWBCW")
 # Get only 2017 season
 qbr2017 <- qbr2017 %>% 
   filter(season == 2017)
@@ -70,8 +71,8 @@ for (i in 1:dim(plays2017)[1]) {
 }
 
 
-# Create a qbr column initiated with all zeros
-plays2017$qbr <- rep(0, dim(plays2017)[1])
+# Create a qbr column initiated with all zeros for pass plays and NA for run plays
+plays2017$qbr <- ifelse(plays2017$play_type == "pass", 0, NA)
 
 
 # Gather the QB names from plays 2017

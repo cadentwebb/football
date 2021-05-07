@@ -98,6 +98,8 @@ for (i in qbs[[1]]) {
 
 
 
+
+
 # Search each play description for the string "C.Palmer" and return TRUE if
 # it's found
 # Then, add in Carson Palmer's week 1 rating of 35.6 to each of those columns
