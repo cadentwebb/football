@@ -92,3 +92,64 @@ for (i in qbs[[1]]) {
     }
   }
 }
+
+
+
+# This code will add the defensive ranking to the plays2017 dataset
+# From the pro football statistics website: https://www.pro-football-reference.com/years/2017/opp.htm
+# Uses the "total defense rating" category
+
+# Get defensive ranking data from 2017
+# "Total defense" table
+
+library(rvest)
+
+defRanks <- "https://www.pro-football-reference.com/years/2017/opp.htm" %>% 
+  read_html() %>% 
+  html_node("table") %>% 
+  html_table()
+colnames(defRanks) <- c("Rank", "Team", "Games", "PF", "TotalYds", "TotalPlays", "YardsPerPlay", 
+               "Takeaways", "FumblesLost", "FirstDowns", "PassComp", "PassAtt", "PassYds",
+                 "PassTD", "Int", "YardsPerPass", "PassFirstDowns", "RunAtt", "RunYds", 
+                 "RunTD", "YardsPerRun", "RunFirstDowns", "Penalties", "PenaltyYds", 
+                 "PenaltyFirstDowns", "OffenseScorePercent", "TakeawayPercent",
+                 "ExpectedPoints")
+defRanks <- defRanks %>% 
+  slice(2:33) 
+
+# Get team abbreviations
+
+teamAbbreviations <- plays2017 %>% 
+  group_by(defteam) %>% 
+  summarize(Count = n())
+
+# Set up the data to match with the defensive ranking data
+# Give defRanks the appropriate team abbreviations
+# First, change Oakland to Las Vegas
+teamAbbreviations$defteam <- ifelse(teamAbbreviations$defteam == "LV", "OAK", teamAbbreviations$defteam)
+
+# Make teamAbbreviations an atomic vector
+teamAbbreviations <- teamAbbreviations[[1]]
+
+# Organize the names in alphabetical order
+teamAbbreviations <- teamAbbreviations[order(teamAbbreviations)]
+
+# Switch LA Rams and LA Chargers (helps with alphabetical order later on)
+x <- teamAbbreviations[18] 
+teamAbbreviations[18] <- teamAbbreviations[17]
+teamAbbreviations[17] <- x
+teamAbbreviations
+
+# Give defRanks the appropriate team abbreviations
+defRanks$TeamAbb <- rep(0, dim(defRanks)[1])
+defRanks[order(defRanks[, "Team"]), ]$TeamAbb <- teamAbbreviations
+
+# Now, apply defensive rank to the plays2017 dataset
+plays2017$defRank <- rep(0, dim(plays2017)[1])
+for (i in 1:dim(plays2017)[1]) {
+  for (j in defRanks$TeamAbb) {
+    if (plays2017$defteam[i] == j) {
+      plays2017$defRank[i] <- defRanks[defRanks$TeamAbb == j, 1]
+    }
+  }
+}
