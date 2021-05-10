@@ -176,3 +176,18 @@ for (i in gameIds) {
     }
   }
 }
+
+
+# Add number of defensive personnel on any give play
+plays2017$numDL <- rep(0, dim(plays2017)[1])
+plays2017$numLB <- rep(0, dim(plays2017)[1])
+plays2017$numDB <- rep(0, dim(plays2017)[1])
+for (i in 1:dim(plays2017)[1]) {
+  plays2017$numDL[i] <- substr(plays2017$personnel.defense[i], 1, 1)
+  plays2017$numLB[i] <- substr(plays2017$personnel.defense[i], 7, 7)
+  plays2017$numDB[i] <- substr(plays2017$personnel.defense[i], 13, 13)
+}
+
+plays2017$numDL <- as.integer(plays2017$numDL)
+plays2017$numLB <- as.integer(plays2017$numLB)
+plays2017$numDB <- as.integer(plays2017$numDB)
