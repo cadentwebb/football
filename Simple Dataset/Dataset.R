@@ -43,12 +43,21 @@ plays2017 <- inner_join(databowlPlays2017, pbpPlays2017,
 
 plays2017 <- plays2017 %>% 
   select(gameId, playId, 
-         posteam, defteam, week, playDescription, 
-         defendersInTheBox, numberOfPassRushers, personnel.defense,
+         down.x, yardsToGo, 
+         quarter,
+         pass_length, pass_location, 
+         passer_player_name, pass,
+         run_location, 
+         rusher_player_name, rush,
+         first_down, yards_gained,
+         posteam, defteam, 
+         week, 
+         playDescription, 
+         defendersInTheBox, numberOfPassRushers, 
+         personnel.defense,
          sack, interception,
-         play_type,
-         passer_player_name) %>% 
-  # Eliminate special teams plaeys - keep only runs and passes
+         play_type) %>% 
+  # Eliminate special teams plays - keep only runs and passes
   filter(play_type %in% c("run", "pass"))
 
 
@@ -74,7 +83,7 @@ teams <- plays2017 %>%
 for (i in teams[[1]]) {
   for (j in 1:6) {
     for (k in 1:dim(plays2017[plays2017$week == j & plays2017$posteam == i, 12])[1]) {
-      plays2017[plays2017$week == j & plays2017$posteam == i, 12][[1]][k] <- qbr2017[qbr2017$team_abb == i & qbr2017$week_text == str_c("Week ", j), 11][[1]][1]
+      plays2017[plays2017$week == j & plays2017$posteam == i, "qbr"][[1]][k] <- qbr2017[qbr2017$team_abb == i & qbr2017$week_text == str_c("Week ", j), 11][[1]][1]
     }
   }
 }
@@ -136,8 +145,11 @@ for (i in 1:dim(plays2017)[1]) {
   }
 }
 
+plays2017$defRank <- as.integer(plays2017$defRank)
 
-# Adding number of sacks and interceptions at every point in the game
+
+# Adding number of sacks, interceptions and average number of pass rushers
+# at every point in the game
 
 # First, gather all gameIds
 gameIds <- plays2017 %>% 
@@ -145,37 +157,39 @@ gameIds <- plays2017 %>%
   summarize(Count = n())
 gameIds <- gameIds[[1]]
 
-# Adding sacks
-# Loops through the dataset and inserts the total number of sacks thusfar in a game.
+
+# Loops through the dataset and inserts the total number of sacks, interceptions,
+# and average pass rushers thus far in a game.
 # Very inefficient - took about 2 minutes to run. Could use fixing.
 plays2017$totalSacksGame <- rep(0, dim(plays2017)[1])
+plays2017$totalIntGame <- rep(0, dim(plays2017)[1])
+plays2017$avgPassRushers <- rep(0, dim(plays2017)[1])
 for (i in gameIds) {
   for (j in teams[[1]]) {
     totalSacks <- 0
+    totalInt <- 0
+    avgPassRushers <- 0
+    sumPassRushers <- 0
+    passRushPlays <- 0
     for (k in 1:dim(plays2017)[1]) {
       if (plays2017$gameId[k] == i & plays2017$defteam[k] == j) {
         totalSacks <- totalSacks + plays2017$sack[k]
         plays2017$totalSacksGame[k] <- totalSacks
-      }
-    }
-  }
-}
-
-
-# Adding interceptions
-# Same idea. Still slow.
-plays2017$totalIntGame <- rep(0, dim(plays2017)[1])
-for (i in gameIds) {
-  for (j in teams[[1]]) {
-    totalInt <- 0
-    for (k in 1:dim(plays2017)[1]) {
-      if (plays2017$gameId[k] == i & plays2017$defteam[k] == j) {
         totalInt <- totalInt + plays2017$interception[k]
         plays2017$totalIntGame[k] <- totalInt
+        if (!is.na(plays2017$numberOfPassRushers[k])) {
+          passRushPlays <- passRushPlays + 1
+          sumPassRushers <- sumPassRushers + plays2017$numberOfPassRushers[k]
+          avgPassRushers <- sumPassRushers / passRushPlays
+          plays2017$avgPassRushers[k] <- avgPassRushers
+        } else {
+          plays2017$avgPassRushers[k] <- avgPassRushers
+        }
       }
     }
   }
 }
+
 
 
 # Add number of defensive personnel on any give play
@@ -191,3 +205,20 @@ for (i in 1:dim(plays2017)[1]) {
 plays2017$numDL <- as.integer(plays2017$numDL)
 plays2017$numLB <- as.integer(plays2017$numLB)
 plays2017$numDB <- as.integer(plays2017$numDB)
+
+
+# Add whether or not the defense blitzed on a pass play
+plays2017$isBlitz <- ifelse(plays2017$numberOfPassRushers > 4, 1, 0)
+
+# Spot for chull and defensive efficienty rating
+plays2017$chull <- rep(0, dim(plays2017)[1])
+plays2017$expectedPoints <- rep(0, dim(plays2017)[1])
+
+write.csv(plays2017, "CompleteDataset.csv")
+
+
+
+
+
+
+
