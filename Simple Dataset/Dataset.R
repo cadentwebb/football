@@ -210,9 +210,6 @@ plays2017$numDB <- as.integer(plays2017$numDB)
 # Add whether or not the defense blitzed on a pass play
 plays2017$isBlitz <- ifelse(plays2017$numberOfPassRushers > 4, 1, 0)
 
-# Spot for chull and defensive efficienty rating
-plays2017$chull <- rep(0, dim(plays2017)[1])
-plays2017$expectedPoints <- rep(0, dim(plays2017)[1])
 
 write.csv(plays2017, "CompleteDataset.csv")
 
