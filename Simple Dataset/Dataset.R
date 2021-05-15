@@ -158,26 +158,43 @@ gameIds <- plays2017 %>%
 gameIds <- gameIds[[1]]
 
 
+# Add whether or not the defense blitzed on a pass play
+plays2017$isBlitz <- ifelse(plays2017$numberOfPassRushers > 4, 1, 0)
+for (i in 1:dim(plays2017)[1]) {
+  if (is.na(plays2017$isBlitz[i])) {
+    plays2017$isBlitz[i] <- 0
+  }
+}
+
+
 # Loops through the dataset and inserts the total number of sacks, interceptions,
 # and average pass rushers thus far in a game.
 # Very inefficient - took about 2 minutes to run. Could use fixing.
 plays2017$totalSacksGame <- rep(0, dim(plays2017)[1])
 plays2017$totalIntGame <- rep(0, dim(plays2017)[1])
 plays2017$avgPassRushers <- rep(0, dim(plays2017)[1])
+plays2017$totalPassBlitzGame <- rep(0, dim(plays2017)[1])
 for (i in gameIds) {
   for (j in teams[[1]]) {
     totalSacks <- 0
     totalInt <- 0
+    totalBlitz <- 0
     avgPassRushers <- 0
     sumPassRushers <- 0
     passRushPlays <- 0
     for (k in 1:dim(plays2017)[1]) {
       if (plays2017$gameId[k] == i & plays2017$defteam[k] == j) {
+        # Sacks
         totalSacks <- totalSacks + plays2017$sack[k]
         plays2017$totalSacksGame[k] <- totalSacks
+        # Interceptions
         totalInt <- totalInt + plays2017$interception[k]
         plays2017$totalIntGame[k] <- totalInt
+        # Blitz
+        totalBlitz <- totalBlitz + plays2017$isBlitz[k]
+        plays2017$totalBlitzGame[k] <- totalBlitz
         if (!is.na(plays2017$numberOfPassRushers[k])) {
+          # Average pass rushers
           passRushPlays <- passRushPlays + 1
           sumPassRushers <- sumPassRushers + plays2017$numberOfPassRushers[k]
           avgPassRushers <- sumPassRushers / passRushPlays
@@ -192,7 +209,7 @@ for (i in gameIds) {
 
 
 
-# Add number of defensive personnel on any give play
+# Add number of defensive personnel on any given play
 plays2017$numDL <- rep(0, dim(plays2017)[1])
 plays2017$numLB <- rep(0, dim(plays2017)[1])
 plays2017$numDB <- rep(0, dim(plays2017)[1])
@@ -207,9 +224,8 @@ plays2017$numLB <- as.integer(plays2017$numLB)
 plays2017$numDB <- as.integer(plays2017$numDB)
 
 
-# Add whether or not the defense blitzed on a pass play
-plays2017$isBlitz <- ifelse(plays2017$numberOfPassRushers > 4, 1, 0)
 
+# Write it out as a csv
 
 write.csv(plays2017, "CompleteDataset.csv")
 
