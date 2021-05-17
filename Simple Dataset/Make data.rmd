@@ -1,0 +1,139 @@
+---
+title: "Create dataset"
+author: "Nathan Hawkins"
+date: "5/17/2021"
+output: html_document
+---
+
+# This script you should be able to run and get the dataset we need with chulls
+
+# First we read in all the tracking data
+
+```{r}
+
+library(tidyverse)
+library(vroom)
+file.tracking <- "https://raw.githubusercontent.com/Schmoegurt/Big-Data-Bowl/master/Data/tracking_gameId_2017091713.csv"
+tracking.example <- read_csv(file.tracking)
+
+file.game <- "https://raw.githubusercontent.com/nfl-football-ops/Big-Data-Bowl/master/Data/games.csv"
+games.sum <- read_csv(file.game) 
+
+file.plays <- "https://raw.githubusercontent.com/nfl-football-ops/Big-Data-Bowl/master/Data/plays.csv"
+plays.sum <- read_csv(file.plays)
+games_vec <- unique(games.sum$gameId)
+
+
+
+# for(i in 1:length(games_vec)) {                             
+#     assign(paste0("tracking", games_vec[i]),                                  
+#          vroom(paste0("https://raw.githubusercontent.com/ryurko/Big-Data-Bowl/master/Data/tracking_gameId_",games_vec[i],".csv")))
+#   print(i)
+# }
+
+# my.path is a list of all the games url's.
+my.path <- c("https://raw.githubusercontent.com/Schmoegurt/Big-Data-Bowl/master/Data/tracking_gameId_2017090700.csv")
+my.data <- list()
+
+# Populate my.path
+for(i in 2:length(games_vec)){
+  my.path <- c(my.path, paste0("https://raw.githubusercontent.com/ryurko/Big-Data-Bowl/master/Data/tracking_gameId_",games_vec[i],".csv"))
+}
+
+# vroom all the my.path entries into a list
+for (i in 1:length(my.path)){
+    my.data[[i]] <- vroom(my.path[i])
+    print(i)
+}
+
+
+library(dplyr)
+all_games <- list()
+
+# Trim the list to only include bal_snap, otherwise your computer will break.
+for(i in 1:length(games_vec)){
+  all_games[[i]] <- my.data[[i]] %>% filter(event == "ball_snap")
+}
+
+library(data.table)
+#rbind the list into a single df
+all_games.df <- rbindlist(all_games)
+```
+
+# Merge it with situational data
+
+```{r}
+all_games.merged <- all_games.df %>% inner_join(games.sum) %>% inner_join(plays.sum) 
+
+```
+
+
+# Create an "offense" variable
+
+```{r}
+# Create an offense/defense variable
+# 1 if on offense, 0 for defense
+all_games.merged$pos_team <- ifelse(all_games.merged$homeTeamAbbr == all_games.merged$possessionTeam, "home", "away")
+all_games.merged$offense_team <- ifelse(all_games.merged$pos_team == all_games.merged$team, 1, 0)
+```
+
+
+# Make Chulls
+
+```{r}
+chulls <- NA
+
+for(i in 1:length(unique(all_games.merged$playId))){
+  library(dplyr)
+  
+  # Get the play I want
+  area <- all_games.merged %>% filter(playId == unique(all_games.merged$playId)[i])
+  
+  defense <- area %>% filter(offense_team == 0) %>% dplyr::select(x,y)
+  
+  # Find the convex hull
+  library(grDevices)
+  convex_hull <- defense %>% dplyr::slice(chull(x, y)) 
+
+  # Find chulls
+  chulls[i] <- geometry::polyarea(convex_hull$x, convex_hull$y)
+  
+
+}
+```
+
+
+
+# Merge chulls with the dataset that has everything. 
+
+```{r}
+
+chulls_df <- data.frame(chulls = chulls, playId =  unique(all_games.merged$playId))
+
+chulls_merge <- all_games.merged %>% inner_join(chulls_df)
+```
+
+
+# Merge in PBP
+
+```{r}
+library(nflfastR)
+pbp2017 <- nflfastR::load_pbp(2017)
+
+names(pbp2017)[1] <- "playId"
+names(pbp2017)[3] <- "gameId"
+
+pbpPlays2017 <- load_pbp(2017)
+
+
+# Change column names in pbp to make it easily joinable to allPlays2017
+colnames(pbpPlays2017)[3] <- "gameId"
+colnames(pbpPlays2017)[1] <- "playId"
+#Change gameId in pbp data to a double
+pbpPlays2017$gameId <- as.double(pbpPlays2017$gameId)
+
+# Join the datasets together
+chulls_pbp <- left_join(chulls_merge, pbpPlays2017, 
+                        by = c("gameId", "playId"))
+
+```
