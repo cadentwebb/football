@@ -1,0 +1,199 @@
+---
+title: "Nate Notebook"
+output: html_notebook
+---
+
+```{r}
+#to get data
+library(nflfastR)
+library(espnscrapeR)
+
+#other
+library(tidyverse)
+library(ggplot2)
+library(vroom)
+library(randomForest)
+library(useful)
+library(class)
+```
+
+
+## Get nflfastR data
+```{r}
+pbp_2017 <- nflfastR::load_pbp(seasons = 2017)
+
+pbp_2017 %>% head(15)
+```
+
+## Get Big Data Bowl Data
+```{r}
+#play by play data (looks like it is just a few weeks of data in the 2017 season)
+plays <- vroom("https://raw.githubusercontent.com/nfl-football-ops/Big-Data-Bowl/master/Data/plays.csv")
+
+#tracking data for gameid 2017090700 -- may not use this at all
+#tracking <- vroom("https://raw.githubusercontent.com/nfl-football-ops/Big-Data-Bowl/master/Data/tracking_gameId_2017090700.csv")
+
+plays %>% head(5)
+```
+
+
+#### Clean plays dataframe
+```{r}
+#SPLIT PERSONNEL AND ADD TO DATAFRAME
+
+#split string for the defensive personnel
+split_def <- stringr::str_split_fixed(plays$personnel.defense, " ", n = 7) %>% 
+                          data.frame() %>% 
+                          select(X1, X3, X5)
+names(split_def) <- c("DL", "LB", "DB")
+
+#split string for the offensive personnel
+split_off <- stringr::str_split_fixed(plays$personnel.offense, " ", n = 7) %>% 
+                          data.frame() %>% 
+                          select(X1, X3, X5)
+names(split_off) <- c("RB", "TE", "WR")
+
+#add to plays data and create plays_pers (plays personnel)
+plays_pers <- plays %>% cbind(split_def) %>% cbind(split_off)
+
+#view first 20 rows
+plays_pers %>% head(20)
+```
+
+#### Bind Big Data Bowl and nflfastR data
+```{r}
+#clean up column names for join compatibility
+names <- pbp_2017 %>% names()
+names[1] <- "playId"
+names[3] <- "gameId"
+names(pbp_2017) <- names
+pbp_2017$gameId <- as.double(pbp_2017$gameId)
+
+#join data frames
+plays_2017 <- inner_join(plays_pers, pbp_2017, 
+                        by = c("gameId", "playId"))
+```
+
+
+### Filter out unwanted plays
+```{r}
+#filter out special teams plays
+plays_2017 <- plays_2017 %>% filter(is.na(SpecialTeamsPlayType) == TRUE)
+
+#filter out penalties
+plays_2017 <- plays_2017 %>% filter(isPenalty == FALSE)
+```
+
+## Possible Classifications:
+- Pass
+  - short/deep (pass_length)
+  - air_yards (possibly bin this off to get more possibilities than above)
+  - pass_location
+- Run
+  - middle/right/left (run_location)
+  - run_gap (combine with above variable -- maybe just use this one with middle because the side may not really matter but the gap does)
+
+
+### Simplify classifications to one variable
+```{r}
+#get pass description classification
+plays_2017$pass_description <- ifelse(is.na(plays_2017$pass_length), 
+                                      "", 
+                                      paste("pass", 
+                                            plays_2017$pass_length, 
+                                            plays_2017$pass_location))
+#get run description classification
+plays_2017$run_description <- ifelse(is.na(plays_2017$run_location), 
+                                     "", 
+                                     ifelse(plays_2017$run_location == "middle", 
+                                            "run middle", 
+                                            paste("run", plays_2017$run_gap)))
+
+#combine descriptions
+plays_2017$classification <- paste(plays_2017$pass_description, plays_2017$run_description, sep = "")
+
+#view descriptions and end classification
+plays_2017 %>% select(pass_description, run_description, classification)
+```
+### Features to use in model:
+- defensive personnel (defendersInTheBox, DL, LB, DB)
+- game situation (quarter, down.x, yardToGo, yardline_100)
+- numberOfPassRushers
+
+
+## Get model data
+```{r}
+#get model data
+model_data <- plays_2017 %>% select(classification, defendersInTheBox, DL, LB, DB, quarter, down.x, yardsToGo, yardline_100) %>%
+                             filter(classification != "")
+
+### clean features for model data
+
+#change DL, LB, DB into numeric data types
+model_data$DL <- as.numeric(model_data$DL)
+model_data$LB <- as.numeric(model_data$LB)
+model_data$DB <- as.numeric(model_data$DB)
+
+#impute missing values with column median -- consider throwing these rows out
+model_data <- useful::simple.impute(model_data, fun = stats::median)
+
+write.csv(model_data, "Model Data.csv")
+
+#should return 0 if there is not missing values/NA's
+#which(is.na(model_data))
+
+### Split into training and testing sets
+random <- sample(1:nrow(model_data), 
+                 .3 * nrow(model_data), 
+                 replace = FALSE)
+
+train <- model_data[-random, ]
+test <- model_data[random, ]
+train_y <- model_data[-random, 1]
+test_y <- model_data[random, 1]
+```
+
+## Run Models
+```{r}
+#Random Forest
+rf <- randomForest(classification ~ defendersInTheBox + DL + LB + DB + quarter + down.x + yardsToGo + yardline_100,
+                   proximity = TRUE,
+                        data = train)
+
+
+#KNN
+knn <- class:knn(train, test, cl = train_y, prob = TRUE, k = 10)
+
+
+
+```
+
+
+
+##### POSSIBLE ADD INS
+- offensive formation
+- yardlineSide
+- rolling epa/play on passes and rushes for offense and defense
+- qbr/defensive rating
+- more in depth game information (time of the clock, etc.)
+- weather
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
