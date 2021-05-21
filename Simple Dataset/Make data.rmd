@@ -10,6 +10,7 @@ output: html_document
 # First we read in all the tracking data
 
 ```{r}
+rm(list = ls())
 
 library(tidyverse)
 library(vroom)
@@ -52,55 +53,165 @@ all_games <- list()
 
 # Trim the list to only include bal_snap, otherwise your computer will break.
 for(i in 1:length(games_vec)){
-  all_games[[i]] <- my.data[[i]] %>% filter(event == "ball_snap")
+  all_games[[i]] <- my.data[[i]] %>% filter(event == "ball_snap" | displayName == "football")
 }
 
 library(data.table)
 #rbind the list into a single df
 all_games.df <- rbindlist(all_games)
+
+all_games.df <- all_games.df %>% filter(displayName == "football" & frame.id == 1 | event == "ball_snap") %>% arrange(gameId, playId)
+
+rm(all_games)
+rm(my.data)
+rm(tracking.example)
 ```
 
 # Merge it with situational data
 
 ```{r}
-all_games.merged <- all_games.df %>% inner_join(games.sum) %>% inner_join(plays.sum) 
+all_games.merged <- all_games.df %>% inner_join(plays.sum) %>% inner_join(games.sum)
+
+# Get rid of special teams plays
+all_games.merged <- all_games.merged %>% filter(isSTPlay == FALSE)
+
+
+# Get rid of duplicate rows
+all_games.merged <- all_games.merged[!duplicated(all_games.merged)]
 
 ```
 
 
-# Create an "offense" variable
+# Create an "offense" variable and game_play variable to differentiate between games that have the same play number.
 
 ```{r}
 # Create an offense/defense variable
 # 1 if on offense, 0 for defense
 all_games.merged$pos_team <- ifelse(all_games.merged$homeTeamAbbr == all_games.merged$possessionTeam, "home", "away")
 all_games.merged$offense_team <- ifelse(all_games.merged$pos_team == all_games.merged$team, 1, 0)
+all_games.merged$game_play <- paste0(all_games.merged$gameId, all_games.merged$playId)
+
 ```
 
 
-# Make Chulls
+
+# Make other variables
+# This chunk makes the x, y, and total distance from football variables.
+# Makes Box variable.
+
+
+```{r}
+# # This gets me the 22 players when the ball is snapped for non-special teams plays
+# normal_plays <- merged.data %>% filter(isSTPlay == FALSE) %>% filter(event == "ball_snap")
+
+# Find the football
+football <- all_games.merged %>% filter(isSTPlay == FALSE) %>% filter(displayName == "football")
+
+# Make frame with football x coordinate
+football_x <- football[football$displayName== "football" & football$frame.id == 1, c("x", "y", "playId", "gameId", "game_play")]
+football_x <- unique(football_x)
+
+# Rename line of scrimmate
+names(football_x)[1] <- "football_scrimmage"
+names(football_x)[2] <- "football_hash"
+
+length(unique(football_x$game_play))
+length(unique(all_games.merged$game_play))
+  
+# Join 'em together
+normal_plays_scrimmage <- all_games.merged %>% inner_join(football_x)
+
+# Find the distance between players and line of scrimmage
+
+normal_plays_scrimmage$dist_x <- normal_plays_scrimmage$football_scrimmage - normal_plays_scrimmage$x
+normal_plays_scrimmage$dist_y <- normal_plays_scrimmage$football_hash - normal_plays_scrimmage$y
+normal_plays_scrimmage$total_distance_from_football <- sqrt(normal_plays_scrimmage$dist_y^2 + normal_plays_scrimmage$dist_x^2)
+
+
+
+# Who is in the box?
+# If not in the box then I assume that they are in coverage.
+normal_plays_scrimmage$box <- ifelse(abs(normal_plays_scrimmage$dist_x) < 5 &
+                                       abs(normal_plays_scrimmage$dist_y) < 8 &
+                                             normal_plays_scrimmage$offense_team == 0, 1, 0)
+
+# Make offense players negative and defense positive
+# If they are on offense and greater than 0 then multiply it by -1 so that it is negative. 
+normal_plays_scrimmage$dist_x <- ifelse(normal_plays_scrimmage$dist_x > 0 & normal_plays_scrimmage$offense_team == 1,
+                                        normal_plays_scrimmage$dist_x * -1, normal_plays_scrimmage$dist_x)
+# If they are on defense and less than 0 then multiply it by negative 1 so that it is positive.
+normal_plays_scrimmage$dist_x <- ifelse(normal_plays_scrimmage$dist_x < 0 & normal_plays_scrimmage$offense_team == 0,
+                                        normal_plays_scrimmage$dist_x * -1, normal_plays_scrimmage$dist_x)
+
+#View(normal_plays_scrimmage %>% select(box, offense_team, dist_x, dist_y, total_distance_from_football, displayName))
+all_games.merged <- normal_plays_scrimmage
+
+
+```
+
+# This chunk makes cool variables to play with.
+Chulls: Square footage covered by the defense at ball snap
+far_right_off: horizontal distance from football of furthest right player on the offense
+far_left_off: " left "
+far_right_def: horizontall distance from football furthest right player on the defense 
+far_left_def: " left"
+furthest_deep: Vertical distance of furthest defender from football
+furthest_deep2: Vertical distance of 2nd furthest (deepest) defender from football
+depth_corner1: Vertical distance from football of the leftmost defender
+depth_corner1: " rightmost "
 
 ```{r}
 chulls <- NA
+far_right_off <- NA
+far_left_off <- NA
+far_left_def <- NA
+far_right_def <- NA
+depth_safety1 <- NA
+depth_safety2 <- NA
+depth_corner1 <- NA
+depth_corner2 <- NA
+furthest_deep <- NA
+furthest_deep2 <- NA
+loop_data <- NA
 
-for(i in 1:length(unique(all_games.merged$playId))){
+all_games.merged <- all_games.merged %>% filter(displayName != "football")
+
+for(i in 1:length(unique(all_games.merged$game_play))){
   library(dplyr)
+    
+   # Get the play I want
+    area <- all_games.merged %>% filter(game_play == unique(all_games.merged$game_play)[i]) %>% filter(displayName != "football")
+    
+  if(nrow(area) > 21 & !is.na(area$dist_x[1])){
+    defense <- area %>% filter(offense_team == 0) %>% dplyr::select(x,y)
+    
+    # Find the convex hull
+    library(grDevices)
+    convex_hull <- defense %>% dplyr::slice(chull(x, y)) 
   
-  # Get the play I want
-  area <- all_games.merged %>% filter(playId == unique(all_games.merged$playId)[i])
-  
-  defense <- area %>% filter(offense_team == 0) %>% dplyr::select(x,y)
-  
-  # Find the convex hull
-  library(grDevices)
-  convex_hull <- defense %>% dplyr::slice(chull(x, y)) 
-
-  # Find chulls
-  chulls[i] <- geometry::polyarea(convex_hull$x, convex_hull$y)
-  
-
+    
+    # Find chulls
+    chulls[i] <- geometry::polyarea(convex_hull$x, convex_hull$y)
+    
+    
+    # Assign distances
+    far_right_off[i] <- max(area[area$offense_team == 1, "dist_y"])
+    far_left_off[i] <- min(area[area$offense_team == 1, "dist_y"])
+    far_right_def[i] <- max(area[area$offense_team == 0, "dist_y"])
+    far_left_def[i] <- min(area[area$offense_team == 0, "dist_y"])
+    furthest_deep[i] <- max(area[area$offense_team == 0, "dist_x"])
+    value <- area %>% filter(offense_team == 0) %>% arrange(abs(dist_x)) %>% dplyr::select(dist_x) %>% slice(10)
+    furthest_deep2[i] <- value$dist_x
+    corner1 <- area[area$offense_team == 0 & area$dist_y == max(far_left_def[i]), "dist_x"]
+    depth_corner1[i] <- corner1$dist_x
+    corner2 <- area[area$offense_team == 0 & area$dist_y == max(far_right_def[i]), "dist_x"]
+    depth_corner2[i] <- corner2$dist_x
+  }
 }
+
 ```
+
+
 
 
 
@@ -108,9 +219,12 @@ for(i in 1:length(unique(all_games.merged$playId))){
 
 ```{r}
 
-chulls_df <- data.frame(chulls = chulls, playId =  unique(all_games.merged$playId))
+chulls_df <- data.frame(chulls = chulls, game_play =  unique(all_games.merged$game_play), off_right = far_right_off, off_left = far_left_off, def_right = far_right_def, def_left = far_left_def, def_deep_1 = furthest_deep, def_deep2 = furthest_deep2, corner_right_deep = depth_corner1, corner_left_deep = depth_corner2)
 
 chulls_merge <- all_games.merged %>% inner_join(chulls_df)
+
+chulls_merge <- chulls_merge[!is.na(chulls_merge$corner_left_deep),]
+
 ```
 
 
@@ -136,4 +250,43 @@ pbpPlays2017$gameId <- as.double(pbpPlays2017$gameId)
 chulls_pbp <- left_join(chulls_merge, pbpPlays2017, 
                         by = c("gameId", "playId"))
 
+colnames(chulls_pbp)
 ```
+
+
+# How to do some graphics
+
+```{r}
+
+# Make sure you use chulls.model. This gives you just one instance of each play. Otherwise your results will be messed up.
+chulls.model <- chulls_pbp %>% arrange(game_play) %>% group_by(game_play) %>% slice(1)
+
+library(ggplot2)
+ggplot(data = chulls.model, mapping = aes(x = chulls)) + 
+  geom_histogram()
+
+
+ggplot(data = chulls.model, mapping = aes(x = chulls, y = as.factor(pass))) + 
+  geom_boxplot() + 
+  facet_wrap(~down.y)
+```
+
+
+
+# Cool model results. Not robust yet, this needs a lot of work.
+
+```{r}
+library(dplyr)
+
+chulls.model$corner_left_deep
+
+pass_chull <- glm(data = chulls.model %>% filter(down.y < 4) %>% filter(quarter < 4) %>% filter(yardline_100 > 40), formula = as.factor(pass) ~ as.factor(down.y) + yardsToGo +  yardline_100 + chulls + defendersInTheBox, family = binomial(link = "logit"))
+
+result_chull <- glm(data = chulls.model %>% filter(down.y < 4) %>% filter(quarter < 4) %>% filter(yardline_100 > 20), formula = PlayResult ~ as.factor(down.y) + yardsToGo +  yardline_100 + chulls)
+
+summary(result_chull)
+```
+
+
+
+
