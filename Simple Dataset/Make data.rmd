@@ -286,7 +286,15 @@ result_chull <- glm(data = chulls.model %>% filter(down.y < 4) %>% filter(quarte
 
 summary(result_chull)
 ```
+# Add Madden QB and RB ratings
 
+madden17QB <- read.csv('https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/madden17QB.csv?token=ASLGDPENNK5BHX555LCR37DAVQZPK')
+
+madden17RB <- read.csv('https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/madden17RB.csv?token=ASLGDPBYGWQY3SYYCOTNMKLAVQZSS')
+
+
+qb_chulls <- merge(x = chulls.model, y = madden17QB, by = "displayName", all = TRUE)
+chulls.model <- merge(x = qb_chulls, y = madden17RB, by = "displayName", all = TRUE)
 
 
 
