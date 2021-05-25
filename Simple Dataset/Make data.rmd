@@ -525,5 +525,14 @@ colnames(chulls.model)
 ```
 
 
+# Add Nate's epa data
+
+```{r}
+epa <- read.csv("rolling epa per play.csv")
+
+chulls.model <- inner_join(chulls.model, epa)
+```
+
+
 
 
