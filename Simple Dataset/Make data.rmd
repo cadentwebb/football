@@ -269,6 +269,7 @@ ggplot(data = chulls.model, mapping = aes(x = chulls)) +
 ggplot(data = chulls.model, mapping = aes(x = chulls, y = as.factor(pass))) + 
   geom_boxplot() + 
   facet_wrap(~down.y)
+
 ```
 
 
@@ -286,15 +287,243 @@ result_chull <- glm(data = chulls.model %>% filter(down.y < 4) %>% filter(quarte
 
 summary(result_chull)
 ```
+
+
+
+
 # Add Madden QB and RB ratings
 
-madden17QB <- read.csv('https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/madden17QB.csv?token=ASLGDPENNK5BHX555LCR37DAVQZPK')
+```{r}
+madden17QB <- read.csv('madden17QB.csv')
 
-madden17RB <- read.csv('https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/madden17RB.csv?token=ASLGDPBYGWQY3SYYCOTNMKLAVQZSS')
+madden17RB <- read.csv('madden17RB.csv')
 
 
 qb_chulls <- merge(x = chulls.model, y = madden17QB, by = "displayName", all = TRUE)
 chulls.model <- merge(x = qb_chulls, y = madden17RB, by = "displayName", all = TRUE)
+```
+
+
+
+
+# Add other variables that may be useful
+
+```{r}
+# Get all pass and rush plays from first 6 weeks of 2017 season
+databowlPlays2017 <- vroom("https://raw.githubusercontent.com/nfl-football-ops/Big-Data-Bowl/master/Data/plays.csv")
+
+# Get all play by play data from 2017 season
+pbpPlays2017 <- load_pbp(2017)
+
+
+# Change column names in pbp to make it easily joinable to allPlays2017
+colnames(pbpPlays2017)[3] <- "gameId"
+colnames(pbpPlays2017)[1] <- "playId"
+#Change gameId in pbp data to a double
+pbpPlays2017$gameId <- as.double(pbpPlays2017$gameId)
+
+# Join the datasets together
+plays2017 <- inner_join(databowlPlays2017, pbpPlays2017, 
+                        by = c("gameId", "playId"))
+```
+
+
+
+
+# Weekly QBR
+
+```{r}
+# Adding Weeks 1-6 QBR to dataset
+# First, get the data from Nate's file
+
+qbr2017 <- read_csv("2017-2018 Weekly ESPN QBR.csv")
+# Get only 2017 season
+qbr2017 <- qbr2017 %>% 
+  filter(season == 2017)
+
+
+# Create a qbr column initiated with all zeros for pass plays and NA for run plays
+plays2017$qbr <- rep(0, dim(plays2017)[1])
+
+# Gather the QB names from plays 2017
+teams <- plays2017 %>% 
+  group_by(posteam) %>% 
+  filter(!is.na(posteam)) %>% 
+  summarize(Count = n())
+
+# Add Weeks 1-6 QBR for each QB to every play in plays2017
+for (i in teams[[1]]) {
+  for (j in 1:6) {
+    for (k in 1:dim(plays2017[plays2017$week == j & plays2017$posteam == i, 12])[1]) {
+      plays2017[plays2017$week == j & plays2017$posteam == i, "qbr"][[1]][k] <- qbr2017[qbr2017$team_abb == i & qbr2017$week_text == str_c("Week ", j), 11][[1]][1]
+    }
+  }
+}
+
+```
+
+
+
+
+# Defensive ranking at end of 2017 - not super useful, but in case we wanna
+# do something with it
+
+```{r}
+# This code will add the defensive ranking to the plays2017 dataset
+
+# Get defensive ranking from 2017
+
+library(rvest)
+
+defRanks <- "https://www.pro-football-reference.com/years/2017/opp.htm" %>% 
+  read_html() %>% 
+  html_node("table") %>% 
+  html_table()
+colnames(defRanks) <- c("Rank", "Team", "Games", "PF", "TotalYds", "TotalPlays", "YardsPerPlay", 
+               "Takeaways", "FumblesLost", "FirstDowns", "PassComp", "PassAtt", "PassYds",
+                 "PassTD", "Int", "YardsPerPass", "PassFirstDowns", "RunAtt", "RunYds", 
+                 "RunTD", "YardsPerRun", "RunFirstDowns", "Penalties", "PenaltyYds", 
+                 "PenaltyFirstDowns", "OffenseScorePercent", "TakeawayPercent",
+                 "ExpectedPoints")
+defRanks <- defRanks %>% 
+  slice(2:33) 
+
+# Get team abbreviations
+
+teamAbbreviations <- plays2017 %>% 
+  group_by(defteam) %>% 
+  summarize(Count = n())
+
+# Set up the data to match with the defensive ranking data
+# Give defRanks the appropriate team abbreviations
+# First, change Oakland to Las Vegas
+teamAbbreviations$defteam <- ifelse(teamAbbreviations$defteam == "LV", "OAK", teamAbbreviations$defteam)
+
+# Make teamAbbreviations an atomic vector
+teamAbbreviations <- teamAbbreviations[[1]]
+
+# Organize the names in alphabetical order
+teamAbbreviations <- teamAbbreviations[order(teamAbbreviations)]
+
+# Switch LA Rams and LA Chargers (helps with alphabetical order later on)
+x <- teamAbbreviations[18] 
+teamAbbreviations[18] <- teamAbbreviations[17]
+teamAbbreviations[17] <- x
+teamAbbreviations
+
+# Give defRanks the appropriate team abbreviations
+defRanks$TeamAbb <- rep(0, dim(defRanks)[1])
+defRanks[order(defRanks[, "Team"]), ]$TeamAbb <- teamAbbreviations
+
+# Now, apply defensive rank to the plays2017 dataset
+plays2017$defRank <- rep(0, dim(plays2017)[1])
+for (i in 1:dim(plays2017)[1]) {
+  for (j in defRanks$TeamAbb) {
+    if (plays2017$defteam[i] == j) {
+      plays2017$defRank[i] <- defRanks[defRanks$TeamAbb == j, 1]
+    }
+  }
+}
+
+plays2017$defRank <- as.integer(plays2017$defRank)
+```
+
+
+
+
+# Adding number of sacks, interceptions and average number of pass rushers
+# at every point in the game
+
+```{r}
+
+# First, gather all gameIds
+gameIds <- plays2017 %>% 
+  group_by(gameId) %>% 
+  summarize(Count = n())
+gameIds <- gameIds[[1]]
+
+
+# Add whether or not the defense blitzed on a pass play
+plays2017$isBlitz <- ifelse(plays2017$numberOfPassRushers > 4, 1, 0)
+for (i in 1:dim(plays2017)[1]) {
+  if (is.na(plays2017$isBlitz[i])) {
+    plays2017$isBlitz[i] <- 0
+  }
+}
+
+# Loops through the dataset and inserts the total number of sacks, interceptions,
+# and average pass rushers thus far in a game.
+
+plays2017$totalSacksGame <- rep(0, dim(plays2017)[1])
+plays2017$totalIntGame <- rep(0, dim(plays2017)[1])
+plays2017$avgPassRushers <- rep(0, dim(plays2017)[1])
+plays2017$totalPassBlitzGame <- rep(0, dim(plays2017)[1])
+for (i in gameIds) {
+  for (j in teams[[1]]) {
+    totalSacks <- 0
+    totalInt <- 0
+    totalBlitz <- 0
+    avgPassRushers <- 0
+    sumPassRushers <- 0
+    passRushPlays <- 0
+    for (k in 1:dim(plays2017)[1]) {
+      if (plays2017$gameId[k] == i & plays2017$defteam[k] == j) {
+        # Sacks
+        totalSacks <- totalSacks + plays2017$sack[k]
+        plays2017$totalSacksGame[k] <- totalSacks
+        # Interceptions
+        totalInt <- totalInt + plays2017$interception[k]
+        plays2017$totalIntGame[k] <- totalInt
+        # Blitz
+        totalBlitz <- totalBlitz + plays2017$isBlitz[k]
+        plays2017$totalPassBlitzGame[k] <- totalBlitz
+        if (!is.na(plays2017$numberOfPassRushers[k])) {
+          # Average pass rushers
+          passRushPlays <- passRushPlays + 1
+          sumPassRushers <- sumPassRushers + plays2017$numberOfPassRushers[k]
+          avgPassRushers <- sumPassRushers / passRushPlays
+          plays2017$avgPassRushers[k] <- avgPassRushers
+        } else {
+          plays2017$avgPassRushers[k] <- avgPassRushers
+        }
+      }
+    }
+  }
+}
+
+
+```
+
+
+
+# Defensive personnel on each play
+
+```{r}
+# Add number of defensive personnel on any given play
+plays2017$numDL <- rep(0, dim(plays2017)[1])
+plays2017$numLB <- rep(0, dim(plays2017)[1])
+plays2017$numDB <- rep(0, dim(plays2017)[1])
+for (i in 1:dim(plays2017)[1]) {
+  plays2017$numDL[i] <- substr(plays2017$personnel.defense[i], 1, 1)
+  plays2017$numLB[i] <- substr(plays2017$personnel.defense[i], 7, 7)
+  plays2017$numDB[i] <- substr(plays2017$personnel.defense[i], 13, 13)
+}
+
+plays2017$numDL <- as.integer(plays2017$numDL)
+plays2017$numLB <- as.integer(plays2017$numLB)
+plays2017$numDB <- as.integer(plays2017$numDB)
+
+```
+
+
+# Merge these variables with chulls.model
+
+```{r}
+chulls.model <- inner_join(chulls.model, plays2017)
+
+colnames(chulls.model)
+```
+
 
 
 
