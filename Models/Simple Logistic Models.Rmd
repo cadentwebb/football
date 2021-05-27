@@ -1,0 +1,341 @@
+---
+title: "Simple Logistic Regression Models"
+author: "Adam Simpson"
+date: "5/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(bestglm)
+library(car)
+```
+
+
+```{r}
+data <- read.csv("FinalDataset.csv")
+
+data$isFirstHalf <- ifelse(data$quarter %in% c(1, 2), 1, 0)
+data$isSecondDown <- ifelse(data$down.x == 2, 1, 0)
+data$isThirdDown <- ifelse(data$down.x == 3, 1, 0)
+data$isFourthDown <- ifelse(data$down.x == 4, 1, 0)
+
+```
+
+Here are a few basic ideas for logistic regression. The response variable is whether or not the offense passes; we will use the variable "pass", which gives a 1 if it was a pass and a 0 if it was a run. We can throw in various predictors and find out what is significant.
+
+This first example is of a single game, game "2017090700", the Chiefs vs. Patriots in week 1. We will restrict our data to this game and see if we can predict the likelihood of the Chiefs passing the ball in any given situation, and same for the Patriots.
+
+
+```{r, echo=FALSE}
+chiefs_vs_pats_week1 <- data %>% 
+  filter(gameId == 2017090700) %>% 
+  filter(posteam == "KC")
+
+# Create a dataset with all desired predictors
+# Make sure to have response variable as the last column
+chiefs_vs_pats_week1_preds <- chiefs_vs_pats_week1 %>% 
+  select(isFirstHalf, isSecondDown, isThirdDown, isFourthDown,
+         yardsToGo, defendersInTheBox, score_differential, chulls, 
+         chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame,
+         pass)
+
+# Basic variable selection
+chiefs_pats_best_subsets_bic <- bestglm(chiefs_vs_pats_week1_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+summary(chiefs_pats_best_subsets_bic$BestModel)
+
+
+# Nothing is significant except for defendersInTheBox... 
+# Now to try Patriots
+
+pats_vs_chiefs_week1 <- data %>% 
+  filter(gameId == 2017090700) %>% 
+  filter(posteam == "NE")
+
+# Create a dataset with all desired predictors
+# Make sure to have response variable as the last column
+pats_vs_chiefs_week1_preds <- pats_vs_chiefs_week1 %>% 
+  select(isFirstHalf, isSecondDown, isThirdDown, isFourthDown,
+         yardsToGo, defendersInTheBox, score_differential, chulls, 
+         chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame,
+         pass)
+
+pats_vs_chiefs_week1_preds
+
+# Just trying to fit a model
+
+summary(glm(data = pats_vs_chiefs_week1_preds, pass ~ isFirstHalf + isSecondDown + isThirdDown + isFourthDown + yardsToGo + defendersInTheBox + score_differential + chulls + chulls_ratio + totalSacksGame + totalIntGame + totalPassBlitzGame,
+    family = binomial))
+
+# Nothing is significant...
+
+
+```
+
+It looks like we have to analyze at a higher level than just one game. Let's try to do a few more things
+
+We'll start with doing only FIRST AND 10 from WEEK 1.
+
+```{r}
+week1_first_downs <- data %>% 
+  filter(week == 1) %>% 
+  filter(down.x == 1 & yardsToGo == 10)
+
+# Now let's select our variables
+week1_first_downs_preds <- week1_first_downs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+
+# Variable selection
+
+week1_first_downs_best_subsets_bic <- bestglm(week1_first_downs_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+summary(week1_first_downs_best_subsets_bic$BestModel)
+
+# Seems like we have some significant variables!
+
+```
+
+After looking at just first and 10 for week 1, we see that defendersInTheBox, score_differential, chulls_ratio, and qbr are all significant. That's pretty cool!
+
+Let's try it now for each week and see if those variables stick
+
+```{r}
+# Week 2
+week2_first_downs <- data %>% 
+  filter(week == 2) %>% 
+  filter(down.x == 1 & yardsToGo == 10)
+
+week2_first_downs_preds <- week2_first_downs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+week2_first_downs_best_subsets_bic <- bestglm(week2_first_downs_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+summary(week2_first_downs_best_subsets_bic$BestModel)
+
+# defendersInTheBox, score_differential, chulls_ratio
+
+
+# Week 3
+week3_first_downs <- data %>% 
+  filter(week == 3) %>% 
+  filter(down.x == 1 & yardsToGo == 10)
+
+week3_first_downs_preds <- week3_first_downs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+week3_first_downs_best_subsets_bic <- bestglm(week3_first_downs_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+summary(week3_first_downs_best_subsets_bic$BestModel)
+
+# defendersInTheBox, score_differential, chulls_ratio
+
+
+# Week 4
+week4_first_downs <- data %>% 
+  filter(week == 4) %>% 
+  filter(down.x == 1 & yardsToGo == 10)
+
+week4_first_downs_preds <- week4_first_downs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+week4_first_downs_best_subsets_bic <- bestglm(week4_first_downs_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+summary(week4_first_downs_best_subsets_bic$BestModel)
+
+# defendersInTheBox, score_differential, chulls_ratio
+
+
+# Week 5
+week5_first_downs <- data %>% 
+  filter(week == 5) %>% 
+  filter(down.x == 1 & yardsToGo == 10)
+
+week5_first_downs_preds <- week5_first_downs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+week5_first_downs_best_subsets_bic <- bestglm(week5_first_downs_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+summary(week5_first_downs_best_subsets_bic$BestModel)
+
+# chulls, chulls_ratio
+
+
+# Week 6
+week6_first_downs <- data %>% 
+  filter(week == 6) %>% 
+  filter(down.x == 1 & yardsToGo == 10)
+
+week6_first_downs_preds <- week6_first_downs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+week6_first_downs_best_subsets_bic <- bestglm(week6_first_downs_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+summary(week6_first_downs_best_subsets_bic$BestModel)
+
+# defendersInTheBox, score_differential, chulls_ratio
+
+
+```
+       defendersInTheBox    chulls_ratio    score_differential    chulls    qbr
+Week 1          X                 X                   X                      X
+Week 2          X                 X                   X           
+Week 3          X                 X                   X           
+Week 4          X                 X                   X                       
+Week 5                            X                                 X   
+Week 6          X                 X                   X           
+
+The only variable that was always significant across weeks for 1st and 10 was the chulls_ratio.
+
+Let's try to do all first and 10s regardless of week.
+
+```{r}
+# All Weeks
+all_first_downs <- data %>% 
+  filter(down.x == 1 & yardsToGo == 10)
+
+all_first_downs_preds <- all_first_downs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+all_first_downs_best_subsets_bic <- bestglm(all_first_downs_preds,
+                                IC = "BIC",
+                                method = "seqrep",
+                                TopModels = 1,
+                                family = binomial)
+
+all_first_downs_model <- all_first_downs_best_subsets_bic$BestModel
+summary(all_first_downs_model)
+
+# defendersInTheBox, score_differential, chulls_ratio
+```
+
+When we look at ALL first and 10s, we find these variables to be significant:
+
+isFirstHalf
+defendersInTheBox
+score_differential
+chulls_ratio
+totalPassBlitzGame
+
+
+
+
+
+Perhaps we need to be a bit more "situational". If a team is ahead by 21 points and there's 2:00 left in the 4th quarter, they'll run the ball every time on 1st and 10, right? Let's try to set some restrictions and see if we can be a bit more accurate with prediction.
+
+1. Take out situations when the score_differential is above 16. If a team gets that far behind, their decision-making will be drastically different than in a close game.
+2. Eliminate plays when there are less than 2:00 left in the 2nd quarter or less than 4:00 left in the 4th quarter. These are situations where a team will either run (if they're ahead) or pass (if they're behind) most likely. 
+
+
+Let's start with this:
+1. First and 10s
+2. All games with the Green Bay Packers
+3. Only analyze when GB is on offense
+4. Restrictions as set above
+* How likely is GB to throw on a 1st and 10? Is it different against the teams that they faced?
+
+```{r}
+# First, set up our data
+GB_firstdowns_restricted <- data %>% 
+  filter(down.x == 1 & yardsToGo == 10) %>% 
+  filter(posteam == "GB") %>% 
+  filter(abs(score_differential) < 17) %>% 
+  filter(half_seconds_remaining >= 120 | game_seconds_remaining >= 240)
+
+# Now let's run logistic regression as before!
+
+GB_firstdowns_restricted_preds <- GB_firstdowns_restricted %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+GB_firstdowns_restricted_best_subsets_bic <- bestglm(GB_firstdowns_restricted_preds,
+                                IC = "BIC",
+                                method = "exhaustive",
+                                TopModels = 1,
+                                family = binomial)
+
+GB_firstdowns_restricted_model <- GB_firstdowns_restricted_best_subsets_bic$BestModel
+summary(GB_firstdowns_restricted_model)
+
+# Only defendersInTheBox...
+```
+
+It seems that looking at only one team simply isn't enough data to come up with any kind of valid predictions and significant variables. 
+
+Let's try looking at all teams with great QBs - teams with a QBR above a certain mark. These are teams whose QB is having a hot game. 
+Same restrictions as above will apply.
+
+```{r}
+good_qbs <- data %>% 
+  filter(down.x == 1 & yardsToGo == 10) %>% 
+  filter(abs(score_differential) < 17) %>% 
+  filter(half_seconds_remaining >= 120 | game_seconds_remaining >= 240) %>% 
+  filter(qbr > 60)
+
+# Now fit a model as before
+good_qbs_preds <- good_qbs %>% 
+  select(isFirstHalf, defendersInTheBox, score_differential, chulls, chulls_ratio, totalSacksGame, totalIntGame, totalPassBlitzGame, qbr, defRank, pass)
+
+good_qbs_best_subsets_bic <- bestglm(good_qbs_preds,
+                                IC = "BIC",
+                                method = "exhaustive",
+                                TopModels = 1,
+                                family = binomial)
+
+good_qbs_model <- good_qbs_best_subsets_bic$BestModel
+summary(good_qbs_model)
+
+# Same three predictors as always - score_differential, defendersInTheBox, chulls_ratio
+
+```
+
+
+You can then play around with prediction in specific circumstances.
+
+For example, let's look at this situation: A team with a great QB is facing a first and 10. He sees 7 defendersInTheBox. His team is down by 7. The chulls_ratio is 0.5. (Not entirely sure how to interpret that haha). Let's figure out the probability that he passes the ball.
+
+```{r}
+# Set up the situation
+new_play <- data.frame(defendersInTheBox = 4,
+                      score_differential = -7,
+                      chulls_ratio = 0.5)
+
+pred_log_odds <- predict(good_qbs_model,
+                         newdata = new_play)
+exp(pred_log_odds) / (1 + exp(pred_log_odds))
+```
+
+It seems he was intimidated by the defendersInTheBox and there's only a 33% chance he throws the ball. 
+Change defendersInTheBox to 4; there's now a 63% chance he throws the ball. 
+
+The problem here is this: did the Defense expect a pass, and thus they pulled more people out of the box, or did the Defense only putting 4 people in the box CAUSE the offense to pass? Causation gets hard here. But this is a start with prediction.
+
+
