@@ -1,0 +1,106 @@
+---
+title: "nflproject"
+author: "Rex Moss"
+date: "5/28/2021"
+output: pdf_document
+---
+
+```{r}
+# read in data 
+df <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/FinalDataset.csv?token=ASLGDPB6LDYXSBYYOSA3VNDAWEV2U")
+
+```
+
+```{r}
+# subset data to only include variables we want to include in the model
+df1 <- df[ , c("defendersInTheBox", "numberOfPassRushers", "chulls", "down.x", "yardsToGo","half_seconds_remaining", "pass")] 
+df1[is.na(df1)] <- 0
+```
+
+
+```{r}
+# look at data
+head(df1)
+summary(df1)
+```
+
+```{r}
+# distribution of independent variables
+par(mfrow = c(3,2))
+for( i in 1:6){
+  hist(df1[,i], main = colnames(df1)[i],xlab =     colnames(df1)[i], col = 'yellow')
+}
+```
+
+
+```{r}
+# analyze variable distributions
+par(mfrow = c(3,2))
+boxplot(defendersInTheBox~pass, ylab="defendersInTheBox", xlab= "pass", col="light blue",data = df1)
+boxplot(numberOfPassRushers~pass, ylab="numberOfPassRushers", xlab= "pass", col="light blue",data = df1)
+boxplot(chulls~pass, ylab="chulls", xlab= "pass", col="light blue",data = df1)
+boxplot(down.x~pass, ylab="down.x", xlab= "pass", col="light blue",data = df1)
+boxplot(yardsToGo~pass, ylab="yardsToGo", xlab= "pass", col="light blue",data = df1)
+boxplot(half_seconds_remaining~pass, ylab="half_seconds_remaining~pass", xlab= "pass", col="light blue",data = df1)
+```
+
+```{r}
+# Loading the dplyr package
+library(dplyr)
+ 
+# Using sample_frac to create 70 - 30 slipt into test and train
+train <- sample_frac(df1, 0.7)
+sample_id <- as.numeric(rownames(train)) # rownames() returns character so as.numeric
+test <- df1[-sample_id,]
+
+```
+
+
+
+```{r}
+
+# Loading the nnet package
+require(nnet)
+# Training the multinomial model
+multinom.fit <- multinom(pass ~ ., data = train)
+ 
+# Checking the model
+summary(multinom.fit)
+```
+
+
+
+```{r}
+## extracting coefficients from the model and exponentiate
+exp(coef(multinom.fit))
+```
+
+
+```{r}
+# Predicting the values for train dataset
+train$precticed <- predict(multinom.fit, newdata = train, "class")
+
+train$precticed
+ 
+# Building classification table
+ctable <- table(train$pass, train$precticed)
+ 
+# Calculating accuracy - sum of diagonal elements divided by total obs
+round((sum(diag(ctable))/sum(ctable))*100,2)
+
+```
+
+
+
+```{r}
+# Predicting the values for train dataset
+test$precticed <- predict(multinom.fit, newdata = test, "class")
+ 
+# Building classification table
+ctable <- table(test$pass, test$precticed)
+ 
+# Calculating accuracy - sum of diagonal elements divided by total obs
+round((sum(diag(ctable))/sum(ctable))*100,2)
+```
+
+
