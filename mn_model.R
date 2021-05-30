@@ -63,7 +63,24 @@ p
 #Exponentiate coefficients
 exp(coef(test))
 
+#Look at original class distributions
+prop.table(table(train_data$play_class))
 
+#Evaluate the model
+# Predicting the values for train dataset
+train_vars <- train_data %>%
+  select(chulls,chulls_ratio,WR_space,def_deep_1,down.x,yardsToGo,quarter)
+
+train_vars$predicted <- predict(test, newdata = train_vars, "class")
+train_vars$real <- train_data$play_class
+
+# Building classification table
+ctable <- table(train_vars$real, train_vars$predicted)
+ctable
+
+#Look at proportions for preds vs original
+prop.table(table(train_data$play_class))
+prop.table(table(train_vars$predicted))
 #Get some plots
 #dwrite <- data.frame(chulls = , down.x = rep(c(1:4),100), quarter = rep(c(1:4),100))
 
