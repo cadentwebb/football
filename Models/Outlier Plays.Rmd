@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(vroom)
+library(mefa4)
 ```
 
 ```{r}
@@ -20,7 +21,9 @@ For the first example, we will look at second and long, a situation where some t
 
 ```{r echo=FALSE}
 finalDataset %>% 
-  filter(down.x == 2 & ydstogo > 10) %>% 
+  filter(down.x == 2 & ydstogo >= 10) %>% 
+  filter(game_seconds_remaining > 240 & half_seconds_remaining > 120) %>% 
+  filter(abs(score_differential) < 17) %>% 
   group_by(posteam) %>% 
   summarize(PropPass = round(mean(pass), 2),
             Total = n(),
@@ -29,18 +32,28 @@ finalDataset %>%
   arrange(desc(PropPass))
 ```
 
-We can see that New England faced 14 2nd and longs, and they threw on 13 of them. Makes sense - let Tom Brady throw. Houston, San Francisco, Atlanta, Cleveland, and Arizona all passed the ball about 87% of the time or more. Why? Let's see if we can find any trends.
 
 ```{r}
 # First, gather these "outlier plays" together
+
 outlier_plays_2nd_long <- finalDataset %>% 
-  filter(down.x == 2 & yardsToGo > 10) %>% 
-  filter(posteam %in% c("NE", "HOU", "SF", "ATL", "CLE", "ARI")) %>% 
-  filter(pass == 0) 
+  filter(down.x == 2 & ydstogo >= 10) %>% 
+  filter(game_seconds_remaining > 240 & half_seconds_remaining > 120) %>% 
+  filter(abs(score_differential) < 17) %>% 
+  filter(posteam %in% c("ARI", "NE", "NYG", "BAL", "HOU", "TB", "CLE", "NYJ")) %>% 
+  filter(pass == 0)
 
 # Look at specific variables that may be of interest here
 outlier_plays_2nd_long %>% 
   select(gameId, playId, posteam, yardsToGo, game_seconds_remaining, defteam, score_differential, totalSacksGame, totalIntGame, numDL, numLB, numDB, chulls, chulls_ratio, qbr)
+
+# Get unexpected run plays
+expected_plays_2nd_long <- finalDataset %>% 
+  filter(down.x == 2 & ydstogo >= 10) %>% 
+  filter(game_seconds_remaining > 240 & half_seconds_remaining > 120) %>% 
+  filter(abs(score_differential) < 17) %>% 
+  filter(posteam %in% c("ARI", "NE", "NYG", "BAL", "HOU", "TB", "CLE", "NYJ")) %>% 
+  filter(pass == 1)
 
 ```
 
@@ -186,30 +199,46 @@ ggplot() +
 In addition to viewing plays and observing trends with our eyes, let's see if we can apply some statistics and find some differences. We can start with a basic two-sample t-test for difference in certain variables.
 
 ```{r}
-# We already have our outlier plays - let's get our expected plays, the passes on 2nd and long
-expected_plays_2nd_long <- finalDataset %>% 
-  filter(down.x == 2 & yardsToGo > 10) %>% 
-  filter(posteam %in% c("NE", "HOU", "SF", "ATL", "CLE", "ARI")) %>% 
-  filter(pass == 1)
 
-# Let's try a t.test for "chulls"
+
+#yardsToGo, game_seconds_remaining, defteam, score_differential, totalSacksGame, totalIntGame, 
+#numDL, numLB, numDB, chulls, chulls_ratio, qbr
+
 t.test(outlier_plays_2nd_long$chulls, expected_plays_2nd_long$chulls)
-# No significant difference...
+#0.05216
 
-# Let's try for chulls_ratio
-t.test(outlier_plays_2nd_long$chulls_ratio, expected_plays_2nd_long$chulls_ratio,
-       alternative = "greater")
-# Pretty good! Two-sided gives p-value of 0.06, One-sided gives 0.03. Significant perhaps?
+t.test(outlier_plays_2nd_long$chulls_ratio, expected_plays_2nd_long$chulls_ratio)
+#0.001024
 
-# What abour others - defendersInTheBox
 t.test(outlier_plays_2nd_long$defendersInTheBox, expected_plays_2nd_long$defendersInTheBox)
-# Nope...
+#0.01173
 
-# Number of defensive backs?
+t.test(outlier_plays_2nd_long$game_seconds_remaining, expected_plays_2nd_long$game_seconds_remaining)
+#0.004616
+
+t.test(outlier_plays_2nd_long$score_differential, expected_plays_2nd_long$score_differential)
+#0.2318
+
+t.test(outlier_plays_2nd_long$totalSacksGame, expected_plays_2nd_long$totalSacksGame)
+#0.04452
+
+t.test(outlier_plays_2nd_long$totalIntGame, expected_plays_2nd_long$totalIntGame)
+#0.01157
+
+t.test(outlier_plays_2nd_long$numDL, expected_plays_2nd_long$numDL)
+#0.02396
+
+t.test(outlier_plays_2nd_long$numLB, expected_plays_2nd_long$numLB)
+#0.001701
+
 t.test(outlier_plays_2nd_long$numDB, expected_plays_2nd_long$numDB)
-# Close - p-value of 0.08 when two-sided.
+#0.261
 
+t.test(outlier_plays_2nd_long$totalPassBlitzGame, expected_plays_2nd_long$totalPassBlitzGame)
+#0.01623
 
+t.test(outlier_plays_2nd_long$yardsToGo, expected_plays_2nd_long$yardsToGo)
+#0.06462
 ```
 
 Let's try to visualize some of these variables, especially chulls_ratio since it seems the most significant of all our tested predictors.
@@ -469,7 +498,7 @@ t.test(outlier_runs_3rd_short$numDL, expected_passes_3rd_short$numDL)
 t.test(outlier_runs_3rd_short$WR_space, expected_passes_3rd_short$WR_space)
 
 t.test(outlier_runs_3rd_short$defendersInTheBox, expected_passes_3rd_short$defendersInTheBox)
-# Significant!
+# Significant! More defenders in the box on the unexpected runs.
 
 t.test(outlier_runs_3rd_short$game_seconds_remaining, expected_passes_3rd_short$game_seconds_remaining)
 
@@ -479,9 +508,18 @@ t.test(outlier_runs_3rd_short$QBrating, expected_passes_3rd_short$QBrating)
 
 t.test(outlier_runs_3rd_short$totalSacksGame, expected_passes_3rd_short$totalSacksGame)
 
-t.test(outlier_runs_3rd_short$totalPassBlitzGame, expected_passes_3rd_short$totalPassBlitzGame)
-# Significant!
+t.test(outlier_runs_3rd_short$totalPassBlitzGame, expected_passes_3rd_short$totalPassBlitzGame,
+       alternative = "less")
+# Significant! Less pass blitzes on the unexpected runs.
+
+t.test(outlier_runs_3rd_short$avgPassRushers, expected_passes_3rd_short$avgPassRushers)
 ```
 
 
+```{r}
+
+finalDataset %>% 
+  filter(down.x == 1 & yardsToGo == 10) %>% 
+  
+```
 
