@@ -1,9 +1,9 @@
 # read in data 
 df <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/FinalDataset_ratings.csv?token=ASLGDPGPF4ZO63HZYB3C5HDAW77FQ")
 library(tidyverse)
+library(xgboost)
 
 #Get column for pass plays
-
 df$pass_type <- paste0("pass ", df$pass_length, " ",df$pass_location)
 df$pass_type <- ifelse(df$pass_type == "pass NA NA", NA, df$pass_type)
 
@@ -21,13 +21,7 @@ df <- df[ , c("defendersInTheBox", "numberOfPassRushers", "chulls", "down.x", "y
 mn_data <- drop_na(df, play_class)
 sum(is.na(mn_data$play_class))
 
-# key
-key = table(mn_data$play_class)
-key
-
-
 # Convert the Species factor to an integer class starting at 0
-# This is picky, but it's a requirement for XGBoost
 play_class = mn_data$play_class
 play_class = as.factor(play_class)
 mn_data$play_class = as.factor(mn_data$play_class)
