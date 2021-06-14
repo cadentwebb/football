@@ -246,8 +246,10 @@ Let's try to visualize some of these variables, especially chulls_ratio since it
 ```{r}
 # Boxplot of chulls_ratio of expected passes
 finalDataset %>% 
-  filter(down.x == 2 & yardsToGo > 10) %>% 
-  filter(posteam %in% c("NE", "HOU", "SF", "ATL", "CLE", "ARI")) %>% 
+  filter(down.x == 2 & ydstogo >= 10) %>% 
+  filter(game_seconds_remaining > 240 & half_seconds_remaining > 120) %>% 
+  filter(abs(score_differential) < 17) %>% 
+  filter(posteam %in% c("ARI", "NE", "NYG", "BAL", "HOU", "TB", "CLE", "NYJ")) %>% 
   ggplot(mapping = aes(x = pass, y = chulls_ratio, group = pass)) +
   geom_boxplot() +
   theme_bw() +
