@@ -12,18 +12,21 @@ knitr::opts_chunk$set(echo = TRUE)
 Use the final dataset that has been cleaned
 
 ```{r}
-h_data <- read.csv("Simple Dataset/FinalDataset_ratings.csv")
+library(dplyr)
+library(nnet)
+library(tidyverse)
+data_ratings <- read.csv("../Simple Dataset/FinalDataset_ratings.csv")
 
-h_data$game_play <- as.character(h_data$game_play)
+data_ratings$game_play <- as.character(data_ratings$game_play)
 
-h_data <- h_data %>%
-  select(-OLrating, -QBrating, -RBrating)
+# h_data <- h_data %>%
+#   select(-OLrating, -QBrating, -RBrating)
 
-#Try and merge in madden ratings
-madden <- chulls_df %>%
-  select(game_play, OLrating, QBrating, RBrating)
-
-data_ratings <- left_join(h_data, madden)
+# #Try and merge in madden ratings
+# madden <- chulls_df %>%
+#   select(game_play, OLrating, QBrating, RBrating)
+# 
+# data_ratings <- left_join(h_data, madden)
 
 #Get levels for measuring outcome
 #May need to take out some plays (throw aways, spikes, qb kneels etc)
