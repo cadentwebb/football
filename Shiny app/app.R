@@ -8,7 +8,7 @@ library(shiny)
 
 ### PRE APP SET UP
 
-#load model  
+#load model    
 model <- xgb.load('model.R')
 getwd()
 
