@@ -7,6 +7,10 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ISLR)
+library(caret)
+library(nnet)
 ```
 
 Use the final dataset that has been cleaned
@@ -14,18 +18,11 @@ Use the final dataset that has been cleaned
 ```{r}
 # read in final dataset
 # Found in "models" folder in github
-h_data <- read.csv("FinalDataset_ratings copy.csv")
+data_ratings <- read.csv("FinalDataset_ratings copy.csv")
 
-h_data$game_play <- as.character(h_data$game_play)
+data_ratings$game_play <- as.character(h_data$game_play)
 
-h_data <- h_data %>%
-  select(-OLrating, -QBrating, -RBrating)
 
-#Try and merge in madden ratings
-madden <- chulls_df %>%
-  select(game_play, OLrating, QBrating, RBrating)
-
-data_ratings <- left_join(h_data, madden)
 
 #Get levels for measuring outcome
 #May need to take out some plays (throw aways, spikes, qb kneels etc)
@@ -66,13 +63,13 @@ sum(is.na(mn_data$pass))
 Create the first run/pass model
 ```{r}
 
-library(nnet)
+
 mn_data$play_class <- as.factor(mn_data$play_class)
 mn_data$down.x <- as.factor(mn_data$down.x)
 mn_data$quarter <- as.factor(mn_data$quarter)
 mn_data$isBlitz <- as.factor(mn_data$isBlitz)
 #split into train test
-library(caret)
+
 
 #play_index <- createDataPartition(mn_data$play_type, p = 0.7, list = FALSE)
 #train_data <- mn_data[play_index, ]
@@ -81,7 +78,7 @@ library(caret)
 #Set short middel pass as the baseline
 
 #train_data$play_class <- relevel(train_data$play_class, ref = "pass short middle")
-library(ISLR)
+
 
 hier_mod <- glm(pass ~ defendersInTheBox + numDL + numLB + numDB + defRank + isBlitz + totalSacksGame + totalIntGame + avgPassRushers + totalPassBlitzGame + safety_depth + avg_corner_depth
                 + chulls+ chulls_ratio, data = mn_data, family = binomial)
