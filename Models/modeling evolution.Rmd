@@ -1,0 +1,876 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(tidyverse)
+library(xgboost)
+library(ggplot2)
+library(gt)
+```
+
+# read in data 
+```{r}
+df <- FinalDataset_ratings
+```
+
+#Get classifications
+```{r}
+#pass classifications
+df$pass_class <- ifelse(is.na(df$pass_length), 
+                        "",
+                        ifelse(df$pass_location == "middle", 
+                               paste("pass", df$pass_length, df$pass_location),
+                               paste("pass", df$pass_length, "side")))
+
+#run classifications
+df$run_class <- ifelse(is.na(df$run_location), 
+                       "",
+                       ifelse(df$run_location == "middle",
+                              "run middle", 
+                              "run side"))
+
+#combine classifications
+df$play_class <- paste(df$run_class, df$pass_class, sep = "")
+
+#filter out "" classif -- for odd plays
+df <- df %>% filter(play_class != "") 
+
+#view
+df %>% select(play_type, pass_length, pass_location, pass_class, run_location, run_class, play_class)
+
+#see unique classifications
+df$play_class %>% unique()
+```
+
+
+#extra data cleaning
+```{r}
+#change down to factor 
+df$down.x <- factor(df$down.x)
+df$first_down <- ifelse(df$down.x == 1, 1, 0)
+df$second_down <- ifelse(df$down.x == 2, 1, 0)
+df$third_down <- ifelse(df$down.x == 3, 1, 0)
+df$fourth_down <- ifelse(df$down.x == 4, 1, 0)
+
+#get rid of rows with NA defendersInTheBox 
+df <- df %>% filter(!is.na(defendersInTheBox))
+```
+
+# RUN/PASS MODEL
+```{r}
+
+```
+
+
+
+
+# MODEL 1
+### Basic Defensive Formation Information
+```{r}
+### variable selection
+
+mn_data <- df %>% select(defendersInTheBox, numDL, numLB, numDB, play_class)
+#Drop other plays like special team and stuff
+mn_data <- drop_na(mn_data, play_class)
+sum(is.na(mn_data$play_class))
+
+# key
+key <- table(mn_data$play_class)
+key
+
+
+# Convert the play_class factor to an integer class starting at 0 (requirement for xgboost)
+play_class <- mn_data$play_class
+play_class <- as.factor(play_class)
+mn_data$play_class <- as.factor(mn_data$play_class)
+label <- as.integer(mn_data$play_class)-1
+mn_data$play_class <- NULL
+
+
+### Split the data for training and testing (75/25 split)
+n <- nrow(mn_data)
+train.index <- sample(n,floor(0.75*n))
+train.data <- as.matrix(mn_data[train.index,])
+train.label <- label[train.index]
+test.data <- as.matrix(mn_data[-train.index,])
+test.label <- label[-train.index]
+
+### Transform the two data sets into xgb.Matrix
+xgb.train <- xgboost::xgb.DMatrix(data = train.data,
+                                  label = train.label)
+xgb.test <- xgboost::xgb.DMatrix(data = test.data,
+                                 label = test.label)
+
+
+### Define the parameters for multinomial classification
+num_class <- length(levels(play_class))
+num_class
+params <- list(booster = "gbtree",
+              eta = 0.001,
+              max_depth = 3,
+              gamma = 3,
+              subsample = 0.75,
+              colsample_bytree = 1,
+              objective = "multi:softprob",
+              eval_metric = "mlogloss",
+              num_class = num_class)
+
+
+### Train the XGBoost classifer
+xgb.fit <- xgboost::xgb.train(params = params,
+                             data = xgb.train,
+                             nrounds = 10000,
+                             nthreads = 1,
+                             early_stopping_rounds = 10,
+                             watchlist = list(val1 = xgb.train,
+                                              val2 = xgb.test),
+                             verbose = 0)
+
+### Predict outcomes with the test data
+xgb.pred <- predict(xgb.fit,
+                    test.data,
+                    reshape=T)
+xgb.pred <- as.data.frame(xgb.pred)
+colnames(xgb.pred) <- levels(play_class)
+
+
+### Use the predicted label with the highest probability
+xgb.pred$prediction <- apply(xgb.pred,1,function(x) colnames(xgb.pred)[which.max(x)])
+xgb.pred$label <- levels(play_class)[test.label+1]
+
+### Calculate the final accuracy
+result <- sum(xgb.pred$prediction == xgb.pred$label) / nrow(xgb.pred)
+print(paste("Final Accuracy =", sprintf("%1.2f%%", 100 * result)))
+```
+
+
+# MODEL 2
+### BASIC INFO with epa
+```{r}
+### variable selection
+
+mn_data <- df %>% select(defendersInTheBox, numDL, numLB, numDB, 
+                    rolling_run_def_epa, rolling_pass_def_epa,
+                    play_class)
+#Drop other plays like special team and stuff
+mn_data <- drop_na(mn_data, play_class)
+sum(is.na(mn_data$play_class))
+
+# key
+key <- table(mn_data$play_class)
+
+
+# Convert the play_class factor to an integer class starting at 0 (requirement for xgboost)
+play_class <- mn_data$play_class
+play_class <- as.factor(play_class)
+mn_data$play_class <- as.factor(mn_data$play_class)
+label <- as.integer(mn_data$play_class)-1
+mn_data$play_class <- NULL
+
+
+### Split the data for training and testing (75/25 split)
+n <- nrow(mn_data)
+train.index <- sample(n,floor(0.75*n))
+train.data <- as.matrix(mn_data[train.index,])
+train.label <- label[train.index]
+test.data <- as.matrix(mn_data[-train.index,])
+test.label <- label[-train.index]
+
+### Transform the two data sets into xgb.Matrix
+xgb.train <- xgboost::xgb.DMatrix(data = train.data,
+                                  label = train.label)
+xgb.test <- xgboost::xgb.DMatrix(data = test.data,
+                                 label = test.label)
+
+
+### Define the parameters for multinomial classification
+num_class <- length(levels(play_class))
+num_class
+params <- list(booster = "gbtree",
+              eta = 0.001,
+              max_depth = 3,
+              gamma = 3,
+              subsample = 0.75,
+              colsample_bytree = 1,
+              objective = "multi:softprob",
+              eval_metric = "mlogloss",
+              num_class = num_class)
+
+
+### Train the XGBoost classifer
+xgb.fit.2 <- xgboost::xgb.train(params = params,
+                             data = xgb.train,
+                             nrounds = 10000,
+                             nthreads = 1,
+                             early_stopping_rounds = 10,
+                             watchlist = list(val1 = xgb.train,
+                                              val2 = xgb.test),
+                             verbose = 0)
+
+### Predict outcomes with the test data
+xgb.pred.2 <- predict(xgb.fit.2,
+                    test.data,
+                    reshape=T)
+xgb.pred.2 <- as.data.frame(xgb.pred.2)
+colnames(xgb.pred.2) <- levels(play_class)
+
+
+### Use the predicted label with the highest probability
+xgb.pred.2$prediction <- apply(xgb.pred.2,1,function(x) colnames(xgb.pred.2)[which.max(x)])
+xgb.pred.2$label <- levels(play_class)[test.label+1]
+
+### Calculate the final accuracy
+result.2 <- sum(xgb.pred.2$prediction == xgb.pred.2$label) / nrow(xgb.pred.2)
+print(paste("Final Accuracy =", sprintf("%1.2f%%", 100 * result.2)))
+```
+
+
+# MODEL 3
+### Take out epa, add in Adam's cumulative in-game stats
+```{r}
+### variable selection
+mn_data <- df %>% select(defendersInTheBox, numDL, numLB, numDB, 
+                    defRank, isBlitz, totalSacksGame, totalIntGame, avgPassRushers, totalPassBlitzGame,
+                    play_class)
+#Drop other plays like special team and stuff
+mn_data <- drop_na(mn_data, play_class)
+sum(is.na(mn_data$play_class))
+
+# key
+key <- table(mn_data$play_class)
+
+
+# Convert the play_class factor to an integer class starting at 0 (requirement for xgboost)
+play_class <- mn_data$play_class
+play_class <- as.factor(play_class)
+mn_data$play_class <- as.factor(mn_data$play_class)
+label <- as.integer(mn_data$play_class) - 1
+mn_data$play_class <- NULL
+
+
+### Split the data for training and testing (75/25 split)
+n <- nrow(mn_data)
+train.index <- sample(n,floor(0.75*n))
+train.data <- as.matrix(mn_data[train.index,])
+train.label <- label[train.index]
+test.data <- as.matrix(mn_data[-train.index,])
+test.label <- label[-train.index]
+
+### Transform the two data sets into xgb.Matrix
+xgb.train <- xgboost::xgb.DMatrix(data = train.data,
+                                  label = train.label)
+xgb.test <- xgboost::xgb.DMatrix(data = test.data,
+                                 label = test.label)
+
+
+### Define the parameters for multinomial classification
+num_class <- length(levels(play_class))
+num_class
+params <- list(booster = "gbtree",
+              eta = 0.001,
+              max_depth = 3,
+              gamma = 3,
+              subsample = 0.75,
+              colsample_bytree = 1,
+              objective = "multi:softprob",
+              eval_metric = "mlogloss",
+              num_class = num_class)
+
+
+### Train the XGBoost classifer
+xgb.fit.3 <- xgboost::xgb.train(params = params,
+                             data = xgb.train,
+                             nrounds = 10000,
+                             nthreads = 1,
+                             early_stopping_rounds = 10,
+                             watchlist = list(val1 = xgb.train,
+                                              val2 = xgb.test),
+                             verbose = 0)
+
+### Predict outcomes with the test data
+xgb.pred.3 <- predict(xgb.fit.3,
+                    test.data,
+                    reshape=T)
+xgb.pred.3 <- as.data.frame(xgb.pred.3)
+colnames(xgb.pred.3) <- levels(play_class)
+
+
+### Use the predicted label with the highest probability
+xgb.pred.3$prediction <- apply(xgb.pred,1,function(x) colnames(xgb.pred.3)[which.max(x)])
+xgb.pred.3$label <- levels(play_class)[test.label+1]
+
+### Calculate the final accuracy
+result.3 <- sum(xgb.pred.3$prediction == xgb.pred.3$label) / nrow(xgb.pred.3)
+print(paste("Final Accuracy =", sprintf("%1.2f%%", 100 * result.3)))
+```
+
+
+# MODEL 4
+### Take out features that were not very important from above model
+```{r}
+### variable selection
+mn_data <- df %>% select(defendersInTheBox, numDB, 
+                    defRank, isBlitz, avgPassRushers, 
+                    play_class)
+#Drop other plays like special team and stuff
+mn_data <- drop_na(mn_data, play_class)
+sum(is.na(mn_data$play_class))
+
+# key
+key <- table(mn_data$play_class)
+
+
+# Convert the play_class factor to an integer class starting at 0 (requirement for xgboost)
+play_class <- mn_data$play_class
+play_class <- as.factor(play_class)
+mn_data$play_class <- as.factor(mn_data$play_class)
+label <- as.integer(mn_data$play_class)-1
+mn_data$play_class <- NULL
+
+
+### Split the data for training and testing (75/25 split)
+n <- nrow(mn_data)
+train.index <- sample(n,floor(0.75*n))
+train.data <- as.matrix(mn_data[train.index,])
+train.label <- label[train.index]
+test.data <- as.matrix(mn_data[-train.index,])
+test.label <- label[-train.index]
+
+### Transform the two data sets into xgb.Matrix
+xgb.train <- xgboost::xgb.DMatrix(data = train.data,
+                                  label = train.label)
+xgb.test <- xgboost::xgb.DMatrix(data = test.data,
+                                 label = test.label)
+
+
+### Define the parameters for multinomial classification
+num_class <- length(levels(play_class))
+num_class
+params <- list(booster = "gbtree",
+              eta = 0.001,
+              max_depth = 3,
+              gamma = 3,
+              subsample = 0.75,
+              colsample_bytree = 1,
+              objective = "multi:softprob",
+              eval_metric = "mlogloss",
+              num_class = num_class)
+
+
+### Train the XGBoost classifer
+xgb.fit.4 <- xgboost::xgb.train(params = params,
+                             data = xgb.train,
+                             nrounds = 10000,
+                             nthreads = 1,
+                             early_stopping_rounds = 10,
+                             watchlist = list(val1 = xgb.train,
+                                              val2 = xgb.test),
+                             verbose = 0)
+
+### Predict outcomes with the test data
+xgb.pred.4 <- predict(xgb.fit.4,
+                    test.data,
+                    reshape=T)
+xgb.pred.4 <- as.data.frame(xgb.pred.4)
+colnames(xgb.pred.4) <- levels(play_class)
+
+
+### Use the predicted label with the highest probability
+xgb.pred.4$prediction <- apply(xgb.pred,1,function(x) colnames(xgb.pred.4)[which.max(x)])
+xgb.pred.4$label <- levels(play_class)[test.label+1]
+
+### Calculate the final accuracy
+result.4 <- sum(xgb.pred.4$prediction == xgb.pred.4$label) / nrow(xgb.pred.4)
+print(paste("Final Accuracy =", sprintf("%1.2f%%", 100 * result.4)))
+```
+
+
+
+# MODEL 5
+### add in tracking data variables
+```{r}
+### variable selection
+
+mn_data <- df %>% select(defendersInTheBox,
+                    safety_depth, avg_corner_depth, chulls, chulls_ratio, 
+                    play_class)
+#Drop other plays like special team and stuff
+mn_data <- drop_na(mn_data, play_class)
+sum(is.na(mn_data$play_class))
+
+# key
+key <- table(mn_data$play_class)
+
+# get 150 of each classification 
+mn_data
+
+
+# Convert the play_class factor to an integer class starting at 0 (requirement for xgboost)
+play_class <- mn_data$play_class
+play_class <- as.factor(play_class)
+mn_data$play_class <- as.factor(mn_data$play_class)
+label <- as.integer(mn_data$play_class)-1
+mn_data$play_class <- NULL
+
+
+### Split the data for training and testing (75/25 split)
+n <- nrow(mn_data)
+train.index <- sample(n,floor(0.75*n))
+train.data <- as.matrix(mn_data[train.index,])
+train.label <- label[train.index]
+test.data <- as.matrix(mn_data[-train.index,])
+test.label <- label[-train.index]
+
+### Transform the two data sets into xgb.Matrix
+xgb.train <- xgboost::xgb.DMatrix(data = train.data,
+                                  label = train.label)
+xgb.test <- xgboost::xgb.DMatrix(data = test.data,
+                                 label = test.label)
+
+
+### Define the parameters for multinomial classification
+num_class <- length(levels(play_class))
+num_class
+params <- list(booster = "gbtree",
+              eta = 0.001,
+              max_depth = 3,
+              gamma = 3,
+              subsample = 0.75,
+              colsample_bytree = 1,
+              objective = "multi:softprob",
+              eval_metric = "mlogloss",
+              num_class = num_class)
+
+
+### Train the XGBoost classifer
+xgb.fit.2 <- xgboost::xgb.train(params = params,
+                             data = xgb.train,
+                             nrounds = 10000,
+                             nthreads = 1,
+                             early_stopping_rounds = 10,
+                             watchlist = list(val1 = xgb.train,
+                                              val2 = xgb.test),
+                             verbose = 0)
+
+### Predict outcomes with the test data
+xgb.pred.2 <- predict(xgb.fit.2,
+                    test.data,
+                    reshape=T)
+xgb.pred.2 <- as.data.frame(xgb.pred.2)
+colnames(xgb.pred.2) <- levels(play_class)
+
+
+### Use the predicted label with the highest probability
+xgb.pred.2$prediction <- apply(xgb.pred.2,1,function(x) colnames(xgb.pred.2)[which.max(x)])
+xgb.pred.2$label <- levels(play_class)[test.label+1]
+
+### Calculate the final accuracy
+result.2 <- sum(xgb.pred.2$prediction == xgb.pred.2$label) / nrow(xgb.pred.2)
+print(paste("Final Accuracy =", sprintf("%1.2f%%", 100 * result.2)))
+```
+
+
+
+# MODEL 6
+### add in game situation variables
+```{r}
+### variable selection
+
+mn_data <- df %>% select(defendersInTheBox, numDL, numLB, numDB, 
+                    safety_depth, avg_corner_depth, chulls, chulls_ratio,
+                    defRank, isBlitz, totalSacksGame, totalIntGame, avgPassRushers, totalPassBlitzGame, 
+                    half_seconds_remaining, yardsToGo, first_down, second_down, third_down, fourth_down,                    play_class)
+
+#Drop other plays like special team and stuff
+mn_data <- drop_na(mn_data, play_class)
+sum(is.na(mn_data$play_class))
+
+# key
+key <- table(mn_data$play_class)
+
+
+# Convert the play_class factor to an integer class starting at 0 (requirement for xgboost)
+play_class <- mn_data$play_class
+play_class <- as.factor(play_class)
+mn_data$play_class <- as.factor(mn_data$play_class)
+label <- as.integer(mn_data$play_class)-1
+mn_data$play_class <- NULL
+
+
+### Split the data for training and testing (75/25 split)
+n <- nrow(mn_data)
+train.index <- sample(n,floor(0.75*n))
+train.data <- as.matrix(mn_data[train.index,])
+train.label <- label[train.index]
+test.data <- as.matrix(mn_data[-train.index,])
+test.label <- label[-train.index]
+
+### Transform the two data sets into xgb.Matrix
+xgb.train <- xgboost::xgb.DMatrix(data = train.data,
+                                  label = train.label)
+xgb.test <- xgboost::xgb.DMatrix(data = test.data,
+                                 label = test.label)
+
+
+### Define the parameters for multinomial classification
+num_class <- length(levels(play_class))
+num_class
+params <- list(booster = "gbtree",
+              eta = 0.001,
+              max_depth = 3,
+              gamma = 3,
+              subsample = 0.75,
+              colsample_bytree = 1,
+              objective = "multi:softprob",
+              eval_metric = "mlogloss",
+              num_class = num_class)
+
+
+### Train the XGBoost classifer
+xgb.fit.6 <- xgboost::xgb.train(params = params,
+                             data = xgb.train,
+                             nrounds = 10000,
+                             nthreads = 1,
+                             early_stopping_rounds = 10,
+                             watchlist = list(val1 = xgb.train,
+                                              val2 = xgb.test),
+                             verbose = 0)
+
+### Predict outcomes with the test data
+xgb.pred.6 <- predict(xgb.fit.6,
+                    test.data,
+                    reshape=T)
+xgb.pred.6 <- as.data.frame(xgb.pred.6)
+colnames(xgb.pred.6) <- levels(play_class)
+
+
+### Use the predicted label with the highest probability
+xgb.pred.6$prediction <- apply(xgb.pred.6,1,function(x) colnames(xgb.pred.6)[which.max(x)])
+xgb.pred.6$label <- levels(play_class)[test.label+1]
+
+### Calculate the final accuracy
+result.6 <- sum(xgb.pred.6$prediction == xgb.pred.6$label) / nrow(xgb.pred.6)
+print(paste("Final Accuracy =", sprintf("%1.2f%%", 100 * result.6)))
+```
+
+```{r}
+xgboost::xgb.importance(colnames(xgb.test),xgb.fit.6)
+```
+# test how accurate the model is for 2nd and 3rd predictions on test set
+```{r}
+### get second and third predictions
+
+temp <- c()
+for (i in 1:nrow(xgb.pred.6)){
+  temp <- append(temp, kit::topn(unlist(xgb.pred.6[i,][0:6]), 3))
+}
+
+#get index for second and third
+xgb.pred.6 <- cbind(xgb.pred.6, 
+                    data.frame(matrix(temp, 
+                                      ncol = 3, 
+                                      byrow = TRUE)) %>% rename("max" = "X1", 
+                                                                "second" = "X2", 
+                                                                "third" = "X3"))
+#convert index into play_class
+xgb.pred.6$second <- colnames(xgb.pred.6)[xgb.pred.6$second]
+xgb.pred.6$third <- colnames(xgb.pred.6)[xgb.pred.6$third]
+
+#see if first and second and third predictions match actual
+xgb.pred.6$correct_1 <- ifelse(xgb.pred.6$prediction == xgb.pred.6$label, 
+                               1,
+                               0)
+
+xgb.pred.6$correct_2 <- ifelse(xgb.pred.6$prediction == xgb.pred.6$label, 
+                               1, 
+                               ifelse(xgb.pred.6$second == xgb.pred.6$label, 
+                                      1,
+                                      0))
+xgb.pred.6$correct_3 <- ifelse(xgb.pred.6$prediction == xgb.pred.6$label, 
+                               1, 
+                               ifelse(xgb.pred.6$second == xgb.pred.6$label, 
+                                      1, 
+                                      ifelse(xgb.pred.6$third == xgb.pred.6$label, 
+                                             1, 
+                                             0)))
+
+#print results
+paste("Second Prediction:", xgb.pred.6$correct_2 %>% mean())
+paste("Third Prediction:", xgb.pred.6$correct_3 %>% mean())
+```
+
+
+
+```{r}
+#identify best model
+best_mod <- xgb.fit.6
+
+#save best model
+xgb.save(best_mod, 'model.R')
+```
+
+
+
+```{r}
+# predict on best model
+play_to_predict <- data.frame(defendersInTheBox = c(1),
+                               numDL = c(1),
+                               numLB = c(1),
+                               numDB = c(1),
+                               safety_depth = c(1),
+                               avg_corner_depth = c(1),
+                               chulls = c(1),
+                               chulls_ratio = c(1),
+                               defRank = c(1),
+                               isBlitz = c(1),
+                               totalSacksGame = c(1),
+                               totalIntGame = c(1),
+                               avgPassRushers = c(1),
+                               totalPassBlitzGame = c(1),
+                               half_seconds_remaining = c(1577),
+                               yardsToGo = c(1),
+                               first_down = c(1),
+                               second_down = c(0),
+                               third_down = c(0),
+                               fourth_down = c(0)
+                              )
+
+prediction <- data.frame(predict(best,
+                                 as.matrix(play_to_predict),
+                                 reshape = T))
+
+
+colnames(prediction) <- c("Pass Deep Side", "Pass Deep Middle", "Pass Short Side", "Pass Short Middle", "Run Middle", "Run Side")
+
+prediction %>% gt()
+
+df$half_seconds_remaining %>% summary()
+
+
+
+```
+
+
+
+```{r}
+#predicted chull for given depths (for code run below)
+df %>% select(x, y, chulls, safety_depth, avg_corner_depth)
+
+chulls_pred <- lm(data = df, chulls ~ safety_depth + avg_corner_depth)
+
+predict(chulls_pred, data.frame(safety_depth = 10, avg_corner_depth = 2))
+
+
+#look at predicted probabilites for given scenerios to answer the following questions:
+#  - does the probability of short plays increase with increase in corner/safety depth
+
+
+t <- data.frame()
+for (i in 1:60){
+  for (j in 1:60){
+  play_to_predict <- data.frame(defendersInTheBox = c(7),
+                                 numDL = c(4),
+                                 numLB = c(3),
+                                 numDB = c(4),
+                                 safety_depth = c(i),
+                                 avg_corner_depth = c(j),
+                                 chulls = c(predict(chulls_pred, 
+                                                    data.frame(safety_depth = i, 
+                                                               avg_corner_depth = j))),
+                                 chulls_ratio = c(.37),
+                                 defRank = c(16),
+                                 isBlitz = c(0),
+                                 totalSacksGame = c(2),
+                                 totalIntGame = c(1),
+                                 avgPassRushers = c(5),
+                                 totalPassBlitzGame = c(5),
+                                 half_seconds_remaining = c(840),
+                                 yardsToGo = c(10),
+                                 first_down = c(1),
+                                 second_down = c(0),
+                                 third_down = c(0),
+                                 fourth_down = c(0)
+                                )
+  
+  prediction <- data.frame(predict(best,
+                                   as.matrix(play_to_predict),
+                                   reshape = T)) %>% cbind(data.frame("safety" = i, "corner" = j))
+  colnames(prediction) <- c("Pass Deep Side", "Pass Deep Middle", "Pass Short Side", "Pass Short Middle", "Run Middle", "Run Side", "Safety Depth", "Corner Depth")
+  
+  t <- rbind(t, prediction)
+  
+  if(i %in% c(10, 20, 30, 40, 50, 60))
+    print(i)
+  }
+}
+
+
+t %>% summary()
+
+
+df %>% group_by(play_class) %>% summarize(count = n())
+```
+
+
+
+```{r}
+xgb.pred.6 %>% group_by(prediction) %>% summarize(count = n(), 
+                                             accuracy = mean(correct_1))
+```
+
+
+
+
+
+```{r}
+agg <- df %>% filter(down.x == as.integer(2)) %>%
+                      filter(ytg_ballpark == "short") %>%
+                      filter(chulls_ballpark == 200) %>% 
+                      group_by(play_class) %>%
+                      summarize(count = n())
+total <- sum(agg$count)
+agg$prop <- agg$count / total
+
+agg <- agg %>% t() %>% data.frame() %>% janitor::row_to_names(row_number = 1)
+cbind(data.frame("Category" = c("Count", "Proportion")), agg) %>% gt()
+```
+
+
+# LOGISTIC REGRESSION APPROACH
+```{r}
+df$play_class %>% unique()
+
+#add dummy variables to use as response variables
+df$pc_run_side <- ifelse(df$play_class == "run side", 1, 0)
+df$pc_run_middle <- ifelse(df$play_class == "run middle", 1, 0)
+df$pc_pass_short_middle <- ifelse(df$play_class == "pass short middle", 1, 0)
+df$pc_pass_short_side <- ifelse(df$play_class == "pass short side", 1, 0)
+df$pc_pass_deep_middle <- ifelse(df$play_class == "pass deep middle", 1, 0)
+df$pc_pass_deep_side <- ifelse(df$play_class == "pass deep side", 1, 0)
+
+#run_side
+df_run_side <- df %>% select(defendersInTheBox,
+                                  safety_depth, avg_corner_depth, chulls, chulls_ratio, 
+                                  pc_run_side)
+log_run_side <- glm(data = df_run_side, pc_run_side ~ ., family = binomial)
+
+#run_middle
+df_run_middle <- df %>% select(defendersInTheBox,
+                                  safety_depth, avg_corner_depth, chulls, chulls_ratio, 
+                                  pc_run_middle)
+log_run_middle <- glm(data = df_run_middle, pc_run_middle ~ ., family = binomial)
+
+#pass short middle
+df_pass_short_middle <- df %>% select(defendersInTheBox,
+                                  safety_depth, avg_corner_depth, chulls, chulls_ratio, 
+                                  pc_pass_short_middle)
+log_pass_short_middle <- glm(data = df_pass_short_middle, pc_pass_short_middle ~ ., family = binomial)
+
+#pass short side
+df_pass_short_side <- df %>% select(defendersInTheBox,
+                                  safety_depth, avg_corner_depth, chulls, chulls_ratio, 
+                                  pc_pass_short_side)
+log_pass_short_side <- glm(data = df_pass_short_side, pc_pass_short_side ~ ., family = binomial)
+
+#pass deep middle
+df_pass_deep_middle <- df %>% select(defendersInTheBox,
+                                  safety_depth, avg_corner_depth, chulls, chulls_ratio, 
+                                  pc_pass_deep_middle)
+log_pass_deep_middle <- glm(data = df_pass_deep_middle, pc_pass_deep_middle ~ ., family = binomial)
+
+#pass deep side
+df_pass_deep_side <- df %>% select(defendersInTheBox,
+                                  safety_depth, avg_corner_depth, chulls, chulls_ratio, 
+                                  pc_pass_deep_side)
+log_pass_deep_side <- glm(data = df_pass_deep_side, pc_pass_deep_side ~ ., family = binomial)
+
+
+logistic_combined <- data.frame("run_side" = log_run_side$fitted.values,
+                                "run_middle" = log_run_middle$fitted.values,
+                                "pass_short_middle" = log_pass_short_middle$fitted.values,
+                                "pass_short_side" = log_pass_short_side$fitted.values,
+                                "pass_deep_middle" = log_pass_deep_middle$fitted.values,
+                                "pass_deep_side" = log_pass_deep_side$fitted.values, 
+                                "Actual" = str_replace_all(df$play_class, " ", "_"))
+
+
+```
+
+
+# find maximum, second, and third most likely classifications
+```{r}
+temp <- c()
+for (i in 1:nrow(logistic_combined)){
+  temp <- append(temp, kit::topn(unlist(logistic_combined[i,][0:6]), 3))
+}
+
+#get index for second and third
+logistic_combined <- cbind(logistic_combined, 
+                    data.frame(matrix(temp, 
+                                      ncol = 3, 
+                                      byrow = TRUE)) %>% rename("max" = "X1", 
+                                                                "second" = "X2", 
+                                                                "third" = "X3"))
+#convert index into play_class
+logistic_combined$max <- colnames(logistic_combined)[logistic_combined$max]
+logistic_combined$second <- colnames(logistic_combined)[logistic_combined$second]
+logistic_combined$third <- colnames(logistic_combined)[logistic_combined$third]
+
+#see if first and second and third predictions match actual
+logistic_combined$correct_1 <- ifelse(logistic_combined$max == logistic_combined$Actual, 
+                               1,
+                               0)
+
+logistic_combined$correct_2 <- ifelse(logistic_combined$max == logistic_combined$Actual, 
+                               1, 
+                               ifelse(logistic_combined$second == logistic_combined$Actual, 
+                                      1,
+                                      0))
+logistic_combined$correct_3 <- ifelse(logistic_combined$max == logistic_combined$Actual, 
+                               1, 
+                               ifelse(logistic_combined$second == logistic_combined$Actual, 
+                                      1, 
+                                      ifelse(logistic_combined$third == logistic_combined$Actual, 
+                                             1, 
+                                             0)))
+
+#print results
+paste("First Prediction:", logistic_combined$correct_1 %>% mean())
+paste("Second Prediction:", logistic_combined$correct_2 %>% mean())
+paste("Third Prediction:", logistic_combined$correct_3 %>% mean())
+```
+
+
+```{r}
+# look at mix of classifications
+
+max_correct <- logistic_combined %>% group_by(max) %>% summarize(max_count = n())
+max_correct$max_prop <- max_correct$max_count / max_correct$max_count %>% sum()
+
+second_correct <- logistic_combined %>% group_by(second) %>% summarize(second_count = n())
+second_correct$second_prop <- second_correct$second_count / second_correct$second_count %>% sum()
+
+third_correct <- logistic_combined %>% group_by(third) %>% summarize(third_count = n())
+third_correct$third_prop <- third_correct$third_count / third_correct$third_count %>% sum()
+
+max_correct %>% full_join(second_correct, by = c("max" = "second")) %>% full_join(third_correct, by = c("max" = "third"))
+```
+
+
+```{r}
+df %>% group_by(posteam) %>% summarize(count = n())
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
