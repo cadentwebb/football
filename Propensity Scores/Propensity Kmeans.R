@@ -2,7 +2,7 @@
 # Use the CBPS package
 
 # read in final dataset
-# Found in "models" folder in github
+# Found in "propensity scores" folder in github
 prop.model <- read.csv("FinalDataset_ratings copy 2.csv")
 
 library(CBPS)

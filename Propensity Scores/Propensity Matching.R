@@ -1,3 +1,8 @@
+
+library(tidyverse)
+# Get the final dataset
+# Found in "propensity scores" folder in github
+final.data <- read.csv("FinalDataset_ratings copy 2.csv")
 prop.model <- final.data
 
 
