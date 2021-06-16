@@ -1,5 +1,5 @@
 # read in data 
-df <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/FinalDataset_ratings.csv?token=ASLGDPGPF4ZO63HZYB3C5HDAW77FQ")
+df <- read.csv("FinalDataset_ratings copy.csv")
 library(tidyverse)
 library(xgboost)
 

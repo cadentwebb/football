@@ -1,7 +1,9 @@
 # Match on a continuous variable
 # Use the CBPS package
-prop.model <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/FinalDataset_ratings.csv?token=AQ3PMSZIWJOK6WU3RRLP7P3AXKGQM")
-write.csv(prop.model, "final.dataset.csv")
+
+# read in final dataset
+# Found in "models" folder in github
+prop.model <- read.csv("FinalDataset_ratings copy 2.csv")
 
 library(CBPS)
 library(dplyr)

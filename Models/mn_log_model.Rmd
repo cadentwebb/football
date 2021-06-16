@@ -12,7 +12,9 @@ knitr::opts_chunk$set(echo = TRUE)
 Use the final dataset that has been cleaned
 
 ```{r}
-h_data <- read.csv("Simple Dataset/FinalDataset_ratings.csv")
+# read in final dataset
+# Found in "models" folder in github
+h_data <- read.csv("FinalDataset_ratings copy.csv")
 
 h_data$game_play <- as.character(h_data$game_play)
 

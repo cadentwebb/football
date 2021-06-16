@@ -13,7 +13,9 @@ library(car)
 
 
 ```{r}
-data <- read.csv("FinalDataset.csv")
+# read in final dataset
+# Found in "models" folder in github
+data <- read.csv("FinalDataset_ratings copy.csv")
 
 data$isFirstHalf <- ifelse(data$quarter %in% c(1, 2), 1, 0)
 data$isSecondDown <- ifelse(data$down.x == 2, 1, 0)

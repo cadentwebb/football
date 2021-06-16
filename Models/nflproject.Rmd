@@ -6,8 +6,9 @@ output: pdf_document
 ---
 
 ```{r}
-# read in data 
-df <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Simple%20Dataset/FinalDataset.csv?token=ASLGDPB6LDYXSBYYOSA3VNDAWEV2U")
+# read in final dataset
+# Found in "models" folder in github
+df <- read.csv("FinalDataset_ratings copy.csv")
 
 ```
 

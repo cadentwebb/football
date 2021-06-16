@@ -1,5 +1,8 @@
 #Modeling
-data <- read.csv("Simple Dataset/FinalDataset.csv")
+
+# read in final dataset
+# Found in "models" folder in github
+data <- read.csv("FinalDataset_ratings copy.csv")
 
 data$game_play <- as.character(data$game_play)
 

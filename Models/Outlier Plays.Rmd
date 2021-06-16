@@ -12,6 +12,8 @@ library(mefa4)
 ```
 
 ```{r}
+# read in final dataset
+# Found in "models" folder in github
 finalDataset <- read.csv("FinalDataset_ratings copy.csv")
 ```
 
