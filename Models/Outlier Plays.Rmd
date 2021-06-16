@@ -13,8 +13,7 @@ library(mefa4)
 
 ```{r}
 # read in final dataset
-# Found in "models" folder in github
-finalDataset <- read.csv("FinalDataset_ratings copy.csv")
+finalDataset <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/FinalDataset.csv")
 ```
 
 Let's try to analyze what we can call an "outlier play". This is a play where, in a given situation, a team behaves in a way that is "unusual" - it's not what they were expected to do. We can then look for trends in the defense in these situation - how did they force a team behave in an uncharacteristic way? 

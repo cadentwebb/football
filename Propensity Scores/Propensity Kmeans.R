@@ -2,8 +2,7 @@
 # Use the CBPS package
 
 # read in final dataset
-# Found in "propensity scores" folder in github
-prop.model <- read.csv("FinalDataset_ratings copy 2.csv")
+prop.model <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/FinalDataset.csv")
 
 library(CBPS)
 library(dplyr)

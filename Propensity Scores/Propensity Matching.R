@@ -1,8 +1,7 @@
 
 library(tidyverse)
 # Get the final dataset
-# Found in "propensity scores" folder in github
-final.data <- read.csv("FinalDataset_ratings copy 2.csv")
+final.data <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/FinalDataset.csv")
 prop.model <- final.data
 
 

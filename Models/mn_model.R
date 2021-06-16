@@ -1,8 +1,7 @@
 #Modeling
 
 # read in final dataset
-# Found in "models" folder in github
-data <- read.csv("FinalDataset_ratings copy.csv")
+data <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/FinalDataset.csv")
 
 data$game_play <- as.character(data$game_play)
 

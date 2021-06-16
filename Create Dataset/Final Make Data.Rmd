@@ -177,10 +177,10 @@ ol_rating: Average madden rating of the offensive line
 
 ```{r}
 #I used what was uploaded in the github
-madden17QB <- read.csv('madden17QB.csv')
-madden17RB <- read.csv('madden17RB.csv')
+madden17QB <- read.csv('https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/madden17QB.csv')
+madden17RB <- read.csv('https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/madden17RB.csv')
 #All Madden ratings. Available on github
-Madden <- read_csv("Madden NFL 17 Launch Ratings - Full League.csv")
+Madden <- read_csv("https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/Madden%20NFL%2017%20Launch%20Ratings%20-%20Full%20League.csv")
 
 #Make it merge-able
 madden_new_col <- Madden %>% 
@@ -435,7 +435,7 @@ Weekly QBR
 ```{r}
 # Adding Weeks 1-6 QBR to dataset
 # First, get the data from Nate's file
-qbr2017 <- read_csv("2017-2018 Weekly ESPN QBR.csv")
+qbr2017 <- read_csv("https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/2017-2018%20Weekly%20ESPN%20QBR.csv")
 # Get only 2017 season
 qbr2017 <- qbr2017 %>% 
   filter(season == 2017)
@@ -594,7 +594,7 @@ chulls.model <- inner_join(chulls.model, plays2017)
 Add epa data
 
 ```{r}
-epa <- read.csv("rolling epa per play.csv")
+epa <- read.csv("https://raw.githubusercontent.com/cadentwebb/football/main/Create%20Dataset/rolling%20epa%20per%20play.csv")
 chulls.model <- inner_join(chulls.model, epa)
 write.csv(chulls.model, "FinalDataset.csv")
 ```
